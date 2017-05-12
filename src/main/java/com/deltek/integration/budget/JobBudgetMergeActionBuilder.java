@@ -142,7 +142,7 @@ public class JobBudgetMergeActionBuilder {
         	//TODO Do we need to reset the instance key here? Testing implies we do not.
         	return copy;
     	} catch (Exception e) {
-    		throw new BudgetIntegrationException("Error initialising templateline");
+    		throw new BudgetIntegrationException("Error initialising templateline", e);
     	}
     }
     
