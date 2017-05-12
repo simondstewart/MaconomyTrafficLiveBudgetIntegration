@@ -1,9 +1,13 @@
 package com.deltek.integration.budget;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+
+import javax.annotation.Resource;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -11,25 +15,39 @@ import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
+import org.junit.runner.RunWith;
+import org.springframework.batch.core.job.builder.JobBuilder;
+import org.springframework.test.context.ContextConfiguration;
+import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 import org.testng.Assert;
 
+import com.deltek.integration.ApplicationConfiguration;
 import com.deltek.integration.budget.JobBudgetMergeActionBuilder.Action;
 import com.deltek.integration.budget.JobBudgetMergeActionBuilder.BudgetLineAction;
+import com.deltek.integration.data.Job;
 import com.deltek.integration.maconomy.client.MaconomyRestClient;
 import com.deltek.integration.maconomy.domain.CardTableContainer;
 import com.deltek.integration.maconomy.domain.Record;
 import com.deltek.integration.maconomy.psorestclient.MaconomyPSORestContext;
 import com.deltek.integration.maconomy.psorestclient.domain.JobBudget;
 import com.deltek.integration.maconomy.psorestclient.domain.JobBudgetLine;
+import com.sohnar.trafficlite.transfer.Identifier;
+import com.sohnar.trafficlite.transfer.financial.ChargeBandTO;
+import com.sohnar.trafficlite.transfer.financial.MoneyTO;
+import com.sohnar.trafficlite.transfer.financial.PrecisionMoneyTO;
 import com.sohnar.trafficlite.transfer.project.JobTO;
 import com.sohnar.trafficlite.transfer.project.JobTaskTO;
 
+@RunWith(SpringJUnit4ClassRunner.class)
+@ContextConfiguration(classes=ApplicationConfiguration.class)
 public class JobToBudgetServiceTest {
 
 	private final Log log = LogFactory.getLog(getClass());
 	
-	private MaconomyPSORestContext restClientContext;
+	@Resource
 	private JobToBudgetService jobToBudgetService;
+
+	private MaconomyPSORestContext restClientContext;
 	private IntegrationDetailsHolder integrationDetails;
 
 	@Rule
@@ -44,8 +62,14 @@ public class JobToBudgetServiceTest {
 		 MaconomyRestClient mrc = new MaconomyRestClient(user, pass, 
 				 									macRestURL);
 		 restClientContext = new MaconomyPSORestContext(mrc);
-		 jobToBudgetService = new JobToBudgetService();
-		 integrationDetails = new IntegrationDetailsHolder(new HashMap<>(), 
+		 
+		 Map<Identifier, ChargeBandTO> chargeBandMap = new HashMap<>();
+
+		 //Integration needs valid chargebands with external codes.
+		 ChargeBandTO chargeBand = new ChargeBandTO();
+		 chargeBand.setExternalCode("100");
+		 chargeBandMap.put(new Identifier(1), chargeBand);
+		 integrationDetails = new IntegrationDetailsHolder(chargeBandMap , 
 				 macRestURL, 
 				 	user, pass, "baseline", "remark10", "UTC");
 	}
@@ -65,15 +89,21 @@ public class JobToBudgetServiceTest {
 	
 	private JobTO createJob() {
 		JobTO job = new JobTO();
-		job.getJobTasks().add(createJobTask("ONE"));
-		job.getJobTasks().add(createJobTask("TWO"));
+		job.getJobTasks().add(createJobTask("ONE", BigDecimal.ONE, MoneyTO.buildDefaultMoney(1.0f), 
+								PrecisionMoneyTO.buildDefaultMoney(2.0f), new Identifier(1)));
+		job.getJobTasks().add(createJobTask("TWO", BigDecimal.TEN, MoneyTO.buildDefaultMoney(10.0f), 
+								PrecisionMoneyTO.buildDefaultMoney(20.f), new Identifier(1)));
 		return job ;
 	}
 
-	private JobTaskTO createJobTask(String description) {
+	private JobTaskTO createJobTask(String description, BigDecimal quantity, MoneyTO cost, PrecisionMoneyTO rate, Identifier chargeBandId) {
 		JobTaskTO jobTask = new JobTaskTO();
 		jobTask.setUuid(UUID.randomUUID().toString());
 		jobTask.setDescription(description);
+		jobTask.setQuantity(quantity);
+		jobTask.setCost(cost);
+		jobTask.setRate(rate);
+		jobTask.setChargeBandId(chargeBandId);
 		return jobTask ;
 	}
 

@@ -38,8 +38,12 @@ public class JobTaskBudgetLineMapper extends BudgetLineMapper<JobTaskTO> {
         	maconomyLine.setLinetype(ConversionConstants.MACONOMY_MILESTONE_TYPE);
         } else {
             ChargeBandTO chargeBand = integrationDetails.getTrafficLiveChargeBands().get(trafficTask.getChargeBandId());
-            if (chargeBand == null || StringUtils.isBlank(chargeBand.getExternalCode()))
+            if (chargeBand == null) 
+            	throw new BudgetIntegrationException("ChargeBand does not exist for id: "+trafficTask.getChargeBandId());
+            
+            if(StringUtils.isBlank(chargeBand.getExternalCode()))
                 throw new BudgetIntegrationException(String.format("Chargeband '%s' has empty externalCode. It must be set to a corresponding Maconomy task's name.", chargeBand.getName()));
+
             maconomyLine.setTaskname(chargeBand.getExternalCode());
             maconomyLine.setEmployeecategorynumber(chargeBand.getSecondaryExternalCode());
         }

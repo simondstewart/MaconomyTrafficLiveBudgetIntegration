@@ -68,14 +68,8 @@ public class JobToBudgetService {
     private static final Logger juliLogger = Logger.getLogger(JobToBudgetService.class.getName());
 	private static final String DEFAULT_UUID_PROPERTY = "remark10";
 	
-//    @Resource
-//    TrafficLiveRestClient trafficLiveClient;
-    
-    @Resource
-    MaconomyRestClient maconomyClient;
-    
-    @Resource(name="jsonObjectMapper")
-    ObjectMapper objectMapper;
+    @Resource(name="objectMapper")
+    private ObjectMapper objectMapper;
     
     /**
      * Push the TrafficLIVE Job to a Maconomy Budget.
