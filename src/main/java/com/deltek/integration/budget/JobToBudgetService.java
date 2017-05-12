@@ -191,6 +191,70 @@ public class JobToBudgetService {
 		return lineActions;
 	}
 	
+	public JobTO mergeJobToMaconomyBudget2(JobTO trafficJob, IntegrationDetailsHolder integrationSettings) {
+
+        MaconomyPSORestContext mrc = buildMaconomyContext(integrationSettings);
+        String maconomyJobNumber = trafficJob.getExternalCode();
+        
+        CardTableContainer<JobBudget, JobBudgetLine> budgetData = 
+        		mrc.jobBudget().data(String.format("jobnumber=%s", maconomyJobNumber));
+
+        budgetData = updateBudgetType(budgetData, integrationSettings.getMaconomyBudgetType(), mrc);
+    	budgetData = mrc.jobBudget().postToAction("action:reopenbudget", budgetData.card());
+        //Open the existing budget of this type, create non existent trafficlive lines.
+        //Update existing budget lines to the new values from TrafficLIVE.
+        //Delete budget lines that no longer exist.
+        budgetData = mergeJobWithBudget(budgetData, trafficJob, integrationSettings, mrc);
+//        budgetData = deleteNonTrafficBudgetLines(budgetData, integrationSettings, mrc);
+//        budgetData = createBudgetItems(trafficJob, budgetData, integrationSettings, mrc);
+        budgetData.card().getData()
+                .setRevisionremark1var(String.format("Synced at %s (UTC) from TrafficLIVE  by %s", 
+                		DATE_TIME_FORMAT.format(Calendar.getInstance().getTime()), getCurrentUserName()));
+        budgetData = updateBudget(budgetData, mrc);
+        budgetData = submitBudget(budgetData, mrc);
+        budgetData = approveBudget(budgetData, mrc);
+        trafficJob.setExternalData(jsonLastUpdatedObject("Last budget sent:"));
+        return trafficJob;
+    }
+    
+	public CardTableContainer<JobBudget, JobBudgetLine> mergeJobWithBudget(CardTableContainer<JobBudget, JobBudgetLine> budgetData,
+																			JobTO job,
+																			IntegrationDetailsHolder integrationDetails, 
+																			MaconomyPSORestContext mrc) {
+		//The job is the master in this scenario.  Create a uuid key map.
+		Map<String, JobStageTO> uuidStageMap = job.getJobStages().stream().collect(Collectors.toMap(JobStageTO::getUuid, Function.identity()));
+		Map<String, JobTaskTO> uuidTaskMap = job.getJobTasks().stream().collect(Collectors.toMap(JobTaskTO::getUuid, Function.identity()));
+		Map<String, JobExpenseTO> uuidExpenseMap = job.getJobExpenses().stream().collect(Collectors.toMap(JobExpenseTO::getUuid, Function.identity()));
+		Map<String, JobThirdPartyCostTO> uuidThirdPartyMap = job.getJobThirdPartyCosts().stream().collect(
+																	Collectors.toMap(JobThirdPartyCostTO::getUuid, Function.identity()));
+		//TODO find a clever way to merge this map with Java 8
+		Map<String, HasUuid> uuidJobLineItemMap = new HashMap<>();
+		uuidStageMap.forEach((k,v) -> uuidJobLineItemMap.put(k, v));
+		uuidTaskMap.forEach((k,v) -> uuidJobLineItemMap.put(k, v));
+		uuidExpenseMap.forEach((k,v) -> uuidJobLineItemMap.put(k, v));
+		uuidThirdPartyMap.forEach((k,v) -> uuidJobLineItemMap.put(k, v));
+		
+		//A collection of existing line items mapped to uuid.
+		Map<String, Record<JobBudgetLine>> instanceKeyJobBudgetLineMap = budgetData.tableRecords().stream().collect(
+																	Collectors.toMap(
+																			c -> c.getData().getInstancekey(), 
+																			c -> c));
+		
+		Record<JobBudgetLine> templateLine = mrc.jobBudget().initTable(budgetData.getPanes().getTable());
+		
+		//Generate a collection of lines actions, based on the state to be merged.
+		JobBudgetMergeActionBuilder actionBuilder = new JobBudgetMergeActionBuilder(objectMapper,
+												uuidJobLineItemMap, instanceKeyJobBudgetLineMap, templateLine, 
+												integrationDetails);
+		
+		List<BudgetLineAction> lineActions = actionBuilder.deletes();
+		lineActions.addAll(actionBuilder.creates());
+		lineActions.addAll(actionBuilder.updates());
+		
+		executeActions(mrc, lineActions);
+		return budgetData;
+	}
+
 	/**
 	 * Execution of the order of actions is important.  We make the following assumptions:
 	 * Safe to execute all DELETES first (this will reduce the payload size and fail fast if a line cannot be deleted)

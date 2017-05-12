@@ -77,6 +77,47 @@ public class BudgetTest {
 	}
 	
 	@Test
+	public void executeActions() {
+        CardTableContainer<JobBudget, JobBudgetLine> budgetData = 
+        		restClientContext.jobBudget().data(String.format("jobnumber=%s", "1020123"));
+        
+        budgetData.card().getData().setShowbudgettypevar("Baseline");
+        budgetData = restClientContext.jobBudget().update(budgetData.card());
+        budgetData = restClientContext.jobBudget().postToAction("action:removebudget", budgetData.card());
+        
+        JobToBudgetService jobToBudgetService = new JobToBudgetService();
+        List<BudgetLineAction> lineActions = new ArrayList<>();
+        Record<JobBudgetLine> budgetLine = restClientContext.jobBudget().initTable(budgetData.getPanes().getTable());
+        budgetLine.getData().setText("ONE");
+        lineActions.add(BudgetLineAction.create(budgetLine));
+        lineActions.add(BudgetLineAction.create(budgetLine));
+        lineActions.add(BudgetLineAction.create(budgetLine));
+        lineActions.add(BudgetLineAction.create(budgetLine));
+        lineActions.add(BudgetLineAction.create(budgetLine));
+		jobToBudgetService.executeActions(restClientContext, lineActions);
+		
+		//Lets take the 5 line budget created, remove lines, update lines and create lines and see the effect on concurrency control.
+        CardTableContainer<JobBudget, JobBudgetLine> createdBudget = 
+        		restClientContext.jobBudget().data(String.format("jobnumber=%s", "1020123"));
+        
+        List<BudgetLineAction> cudActions = new ArrayList<>();
+        cudActions.add(BudgetLineAction.delete(createdBudget.recordAt(0)));
+        cudActions.add(BudgetLineAction.delete(createdBudget.recordAt(1)));
+        Record<JobBudgetLine> updatedLineOne = createdBudget.recordAt(2);
+        updatedLineOne.getData().setText("UPDATED ONE");
+        cudActions.add(BudgetLineAction.update(updatedLineOne));
+        Record<JobBudgetLine> updatedLineTwo = createdBudget.recordAt(3);
+        updatedLineTwo.getData().setText("UPDATED TWO");
+        cudActions.add(BudgetLineAction.update(updatedLineTwo));
+        budgetLine.getData().setText("NEW");
+        cudActions.add(BudgetLineAction.create(budgetLine));
+        cudActions.add(BudgetLineAction.create(budgetLine));
+        cudActions.add(BudgetLineAction.create(budgetLine));
+        jobToBudgetService.executeActions(restClientContext, cudActions);
+        
+	}
+ 
+	@Test
 	public void createMultipleLines() {
         CardTableContainer<JobBudget, JobBudgetLine> budgetData = 
         		restClientContext.jobBudget().data(String.format("jobnumber=%s", "1020123"));
