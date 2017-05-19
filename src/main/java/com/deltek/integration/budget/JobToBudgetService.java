@@ -19,6 +19,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
@@ -258,29 +259,42 @@ public class JobToBudgetService {
 	 */
 	 public CardTableContainer<JobBudget, JobBudgetLine> executeActions(MaconomyPSORestContext mrc, List<BudgetLineAction> lineActions) {
 		CardTableContainer<JobBudget, JobBudgetLine> workingBudget = null;
+		Optional<CardTableContainer<JobBudget, JobBudgetLine>> lastBudget = Optional.ofNullable(workingBudget);
+
 		for(BudgetLineAction action : lineActions) {
-			if(workingBudget != null) {
-				//TODO merge the workingBudget concurrency control with the current line.
-				
-			}
 			switch(action.getAction()) {
 				case DELETE:
-					workingBudget = mrc.jobBudget().deleteTableRecord(action.getJobBudgetLine());
+					//A DELETE action requires up to date concurrency data, likely from the previous action response 
+					lastBudget.ifPresent(i-> updateTableRecordMeta(action.getJobBudgetLine(), i));
+					lastBudget =  Optional.of(mrc.jobBudget().deleteTableRecord(action.getJobBudgetLine()));
 					break;
 				case CREATE:
-					workingBudget = mrc.jobBudget().create(action.getJobBudgetLine());
+					//a CREATE action required concurrency control of the Card pane.
+					lastBudget.ifPresent(i-> action.getJobBudgetLine().setMeta(i.card().getMeta()));
+					lastBudget =  Optional.of(mrc.jobBudget().create(action.getJobBudgetLine()));
 					break;
 				case UPDATE:
-					workingBudget = mrc.jobBudget().update(action.getJobBudgetLine());
+					lastBudget.ifPresent(i -> updateTableRecordMeta(action.getJobBudgetLine(), i));
+					lastBudget = Optional.of(mrc.jobBudget().update(action.getJobBudgetLine()));
 					break;
 				default:
 					break;
 			}
 		}
-		return workingBudget;
+		return lastBudget.get();
 	}
 
-    private String jsonLastUpdatedObject(String label){
+    private void updateTableRecordMeta(Record<JobBudgetLine> jobBudgetLine,
+			CardTableContainer<JobBudget, JobBudgetLine> container) {
+    	//If we find a matching record, then update the meta of the line.
+    	Optional<Record<JobBudgetLine>> budgetLine = 
+    			container.tableRecords().stream().filter(i -> jobBudgetLine.getData().getInstancekey().equals(
+    																i.getData().getInstancekey())
+    					).findFirst();
+    	budgetLine.ifPresent(i -> jobBudgetLine.setMeta(i.getMeta()));
+    }
+
+	private String jsonLastUpdatedObject(String label){
         JsonObject lastUpdateObject = new JsonObject();
         lastUpdateObject.add("label", new JsonPrimitive(label));
         lastUpdateObject.add("date", new JsonPrimitive(Calendar.getInstance().getTimeInMillis()));

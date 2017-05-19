@@ -5,7 +5,10 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import javax.annotation.Resource;
 
@@ -16,7 +19,6 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
-import org.springframework.batch.core.job.builder.JobBuilder;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 import org.testng.Assert;
@@ -31,10 +33,12 @@ import com.deltek.integration.maconomy.domain.Record;
 import com.deltek.integration.maconomy.psorestclient.MaconomyPSORestContext;
 import com.deltek.integration.maconomy.psorestclient.domain.JobBudget;
 import com.deltek.integration.maconomy.psorestclient.domain.JobBudgetLine;
+import com.sohnar.trafficlite.transfer.HasUuid;
 import com.sohnar.trafficlite.transfer.Identifier;
 import com.sohnar.trafficlite.transfer.financial.ChargeBandTO;
 import com.sohnar.trafficlite.transfer.financial.MoneyTO;
 import com.sohnar.trafficlite.transfer.financial.PrecisionMoneyTO;
+import com.sohnar.trafficlite.transfer.project.JobStageTO;
 import com.sohnar.trafficlite.transfer.project.JobTO;
 import com.sohnar.trafficlite.transfer.project.JobTaskTO;
 
@@ -68,6 +72,8 @@ public class JobToBudgetServiceTest {
 		 //Integration needs valid chargebands with external codes.
 		 ChargeBandTO chargeBand = new ChargeBandTO();
 		 chargeBand.setExternalCode("100");
+		 //Blank Chargeband
+		 chargeBand.setSecondaryExternalCode("");
 		 chargeBandMap.put(new Identifier(1), chargeBand);
 		 integrationDetails = new IntegrationDetailsHolder(chargeBandMap , 
 				 macRestURL, 
@@ -75,29 +81,99 @@ public class JobToBudgetServiceTest {
 	}
 	
 	@Test
-	public void createBudgetLineActions() {
+	public void verifyBudgetLineActions() {
 		CardTableContainer<JobBudget, JobBudgetLine> emptyBudget = clearBudget("1020123");
-		List<BudgetLineAction> mergeActions = jobToBudgetService.createMergeLineActions(emptyBudget, 
-													createJob(), 
+		
+		JobTO testJob = createJob();
+		
+		List<BudgetLineAction> createActions = jobToBudgetService.createMergeLineActions(emptyBudget, 
+													testJob, 
 													integrationDetails, 
 													restClientContext);
+		Map<String, HasUuid> uuidLine = 
+				testJob.getJobTasks().stream().collect(Collectors.toMap(JobTaskTO::getUuid, Function.identity()));
+		testJob.getJobStages().forEach(stage -> uuidLine.put(stage.getUuid(), stage));
 		
-		Assert.assertEquals(2, mergeActions.stream().filter(
+		Assert.assertEquals(testJob.getJobStages().size() + testJob.getJobTasks().size() , createActions.stream().filter(
 											item -> Action.CREATE.equals(item.getAction()))
 											.count());
+		
+		Map<String, JobBudgetLine> uuidJobBudgetLine = 
+				createActions.stream().map(a -> a.getJobBudgetLine().getData())
+					.collect(Collectors.toMap(
+								((JobBudgetLine r) -> r.lookupTrafficUUID(integrationDetails.getMaconomyBudgetUUIDProperty())), 
+								(Function.identity())
+								)
+							);
+		//Ensure Same UUIDs in both sets.
+		Assert.assertEquals(uuidLine.keySet(), uuidJobBudgetLine.keySet());
+		
+		//Assert line values.
+		uuidLine.values().forEach(task -> assertLineMapping(task, uuidJobBudgetLine.get(task.getUuid()), 
+											integrationDetails.getMaconomyBudgetUUIDProperty() ));
+		
+		//Execute the actions so that we can verify a merge action with existing lines.
+		CardTableContainer<JobBudget, JobBudgetLine> budget =
+				jobToBudgetService.executeActions(restClientContext, createActions);
+		
+		//Re Sync the Job, lines will generate update actions.
+		List<BudgetLineAction> noActions = jobToBudgetService.createMergeLineActions(budget, testJob, 
+				integrationDetails, restClientContext);
+		
+		//No Job changes, so expected 0 update actions.
+		Assert.assertEquals(noActions.size(), 0);
+		
+		//Update one line, create another.
+		JobTaskTO oneTask = 
+				testJob.getJobTasks().stream().filter(task -> task.getDescription() == "ONE").collect(Collectors.toList()).get(0);
+
+		oneTask.setDescription("UPDATED-".concat(oneTask.getDescription()));
+		testJob.getJobTasks().add(createJobTask("THREE", new BigDecimal("5"), MoneyTO.buildDefaultMoney(20f), 
+				PrecisionMoneyTO.buildDefaultMoney(30f), new Identifier(1), 3));
+		
+		List<BudgetLineAction> mergeActions = 
+				jobToBudgetService.createMergeLineActions(budget, testJob, 
+				integrationDetails, restClientContext);
+		
+		//Should be one update and one create.
+		Assert.assertEquals(mergeActions.size(), 2);
+		Assert.assertEquals(mergeActions.stream().filter(i->Action.CREATE.equals(i.getAction())).count(), 1);
+		Assert.assertEquals(mergeActions.stream().filter(i->Action.UPDATE.equals(i.getAction())).count(), 1);
+	}
+
+	private void assertLineMapping(HasUuid jobTask, JobBudgetLine budgetLine, String maconomyUuidproperty) {
+
+		Assert.assertEquals(jobTask.getUuid(), budgetLine.lookupTrafficUUID(maconomyUuidproperty));		
+		//TODO case on the HasUUID concrete type.
+//		Assert.assertEquals(jobTask.getDescription(), budgetLine.getText());
+//		Assert.assertEquals(jobTask.getQuantity().doubleValue(), budgetLine.getNumberof());
 	}
 	
 	private JobTO createJob() {
 		JobTO job = new JobTO();
-		job.getJobTasks().add(createJobTask("ONE", BigDecimal.ONE, MoneyTO.buildDefaultMoney(1.0f), 
-								PrecisionMoneyTO.buildDefaultMoney(2.0f), new Identifier(1)));
+		JobTaskTO  taskOne = createJobTask("ONE", BigDecimal.ONE, MoneyTO.buildDefaultMoney(1.0f), 
+				PrecisionMoneyTO.buildDefaultMoney(2.0f), new Identifier(1), 1);
+		job.getJobTasks().add(taskOne);
+		job.getJobStages().add(createJobStage("STAGE-ONE", Optional.of(taskOne), 2));
 		job.getJobTasks().add(createJobTask("TWO", BigDecimal.TEN, MoneyTO.buildDefaultMoney(10.0f), 
-								PrecisionMoneyTO.buildDefaultMoney(20.f), new Identifier(1)));
-		return job ;
+								PrecisionMoneyTO.buildDefaultMoney(20.f), new Identifier(1), 3));
+		return job;
 	}
 
-	private JobTaskTO createJobTask(String description, BigDecimal quantity, MoneyTO cost, PrecisionMoneyTO rate, Identifier chargeBandId) {
+	private JobStageTO createJobStage(String description, Optional<JobTaskTO> jobTask, Integer lineItemOrder) {
+		JobStageTO stage = new JobStageTO();
+		stage.setDescription(description);
+		stage.setUuid(UUID.randomUUID().toString());
+		stage.setHierarchyOrder(lineItemOrder);
+		jobTask.ifPresent(t -> t.setJobStageUUID(stage.getUuid()));
+		return stage ;
+	}
+
+	private JobTaskTO createJobTask(String description, BigDecimal quantity, MoneyTO cost, PrecisionMoneyTO rate, 
+												Identifier chargeBandId, Integer lineItemOrder) {
 		JobTaskTO jobTask = new JobTaskTO();
+		jobTask.setLineItemOrder(lineItemOrder);
+		jobTask.setHierarchyOrder(lineItemOrder);
 		jobTask.setUuid(UUID.randomUUID().toString());
 		jobTask.setDescription(description);
 		jobTask.setQuantity(quantity);
@@ -106,7 +182,28 @@ public class JobToBudgetServiceTest {
 		jobTask.setChargeBandId(chargeBandId);
 		return jobTask ;
 	}
+	
+	@Test
+	public void twoCreatesAndTwoDeleteActions() {
+		CardTableContainer<JobBudget, JobBudgetLine> budgetData = clearBudget("1020123");
+        
+        List<BudgetLineAction> lineActions = new ArrayList<>();
+        Record<JobBudgetLine> budgetLine = restClientContext.jobBudget().initTable(budgetData.getPanes().getTable());
+        budgetLine.getData().setText("ONE");
+        lineActions.add(BudgetLineAction.create(budgetLine));
+        lineActions.add(BudgetLineAction.create(budgetLine));
+		jobToBudgetService.executeActions(restClientContext, lineActions);
 
+		CardTableContainer<JobBudget, JobBudgetLine> createdBudget = 
+        		restClientContext.jobBudget().data(String.format("jobnumber=%s", "1020123"));
+        
+        List<BudgetLineAction> cudActions = new ArrayList<>();
+        cudActions.add(BudgetLineAction.delete(createdBudget.recordAt(0)));
+        cudActions.add(BudgetLineAction.delete(createdBudget.recordAt(1)));
+        jobToBudgetService.executeActions(restClientContext, cudActions);
+		
+	}
+	
 	@Test
 	public void executeActions() {
 		CardTableContainer<JobBudget, JobBudgetLine> budgetData = clearBudget("1020123");

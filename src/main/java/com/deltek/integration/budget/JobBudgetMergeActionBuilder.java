@@ -2,9 +2,11 @@ package com.deltek.integration.budget;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -66,6 +68,7 @@ public class JobBudgetMergeActionBuilder {
     			lineActions.add(BudgetLineAction.delete(budgetLine));
     		} 
     	});
+    	lineActions.sort(Comparator.comparing(i -> i.getJobBudgetLine().getData().getLinenumber()));
 		return lineActions;
 	}
 	
@@ -81,12 +84,13 @@ public class JobBudgetMergeActionBuilder {
 			{ 	
 				//UUID does not exist in the JobBudgetLines.  This means it will be a create.
 				if(!tlUUIDsInBudget.contains(c.getUuid())) {
-					Record<JobBudgetLine> newLine = initialiseMaconomyLineFromTemplateLine(templateLine);
+					Record<JobBudgetLine> newLine = copyLine(templateLine, true);
 					lookupMapper(c.getClass(), mapperLookup).convertTo(c, newLine.getData());
 					lineActions.add(BudgetLineAction.create(newLine));
 				}
 					
 			});
+    	lineActions.sort(Comparator.comparing(i -> i.getJobBudgetLine().getData().getLinenumber()));
 		return lineActions;
 	}
 
@@ -100,11 +104,15 @@ public class JobBudgetMergeActionBuilder {
 			// removed.
 			if (uuidJobLineItemMap.containsKey(budgetLineTLUUID)) {
 				HasUuid line = uuidJobLineItemMap.get(budgetLineTLUUID);
+				Record<JobBudgetLine> previous = copyLine(budgetEntry.getValue(), false);
 				lookupMapper(line.getClass(), mapperLookup).convertTo(line, budgetEntry.getValue().getData());
-				lineActions.add(BudgetLineAction.update(budgetLine));
+				if(!previous.getData().equals(budgetEntry.getValue().getData())) {
+					lineActions.add(BudgetLineAction.update(budgetLine));
+				}
 			}
 
 		});
+    	lineActions.sort(Comparator.comparing(i -> i.getJobBudgetLine().getData().getLinenumber()));
 		return lineActions;
 	}
 
@@ -131,14 +139,15 @@ public class JobBudgetMergeActionBuilder {
 		
 	}
 
-	private Record<JobBudgetLine> initialiseMaconomyLineFromTemplateLine(Record<JobBudgetLine> templateLine) {
+	private Record<JobBudgetLine> copyLine(Record<JobBudgetLine> templateLine, Boolean newUUID) {
     	//return a value copy
     	try {
     		//TODO runtime startup error, there is no objectMapper instance in this context (it belongs to the API servlet context)
     		//Work out another way to copy the object.
         	String templateString = objectMapper.writeValueAsString(templateLine);
         	Record<JobBudgetLine> copy = objectMapper.readValue(templateString, templateLine.getClass());
-        	copy.getData().setInstancekey("JobBudgetLine"+UUID.randomUUID().toString());
+        	if(newUUID)
+        		copy.getData().setInstancekey("JobBudgetLine"+UUID.randomUUID().toString());
         	//TODO Do we need to reset the instance key here? Testing implies we do not.
         	return copy;
     	} catch (Exception e) {
