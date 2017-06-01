@@ -22,8 +22,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import java.util.function.Function;
-import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
 import javax.annotation.Resource;
@@ -48,9 +46,8 @@ import com.google.gson.JsonPrimitive;
 import com.sohnar.trafficlite.business.utils.ValidationResult;
 import com.sohnar.trafficlite.datamodel.enums.financial.ChargeBandType;
 import com.sohnar.trafficlite.datamodel.enums.financial.CurrencyType;
-import com.sohnar.trafficlite.datamodel.enums.project.JobTaskCategoryType;
+import com.sohnar.trafficlite.datamodel.enums.project.JobTaskCategoryType;  
 import com.sohnar.trafficlite.transfer.BaseTO;
-import com.sohnar.trafficlite.transfer.HasUuid;
 import com.sohnar.trafficlite.transfer.Identifier;
 import com.sohnar.trafficlite.transfer.expenses.JobExpenseTO;
 import com.sohnar.trafficlite.transfer.financial.ChargeBandTO;
@@ -62,11 +59,9 @@ import com.sohnar.trafficlite.transfer.project.JobTO;
 import com.sohnar.trafficlite.transfer.project.JobTaskTO;
 import com.sohnar.trafficlite.transfer.project.JobThirdPartyCostTO;
 
-//@Service
 public class JobToBudgetService {
 
 	private static final Log LOG = LogFactory.getLog(JobToBudgetService.class);
-    private static final Logger juliLogger = Logger.getLogger(JobToBudgetService.class.getName());
 	private static final String DEFAULT_UUID_PROPERTY = "remark10";
 	
     @Resource(name="objectMapper")
@@ -123,6 +118,28 @@ public class JobToBudgetService {
      * In addition, new lines created on the job non-existent in the Budget will be created.
      * 
      */
+	private JobTO mergeJobToMaconomyBudgetOLD(JobTO trafficJob, IntegrationDetailsHolder integrationSettings) {
+
+        MaconomyPSORestContext mrc = buildMaconomyContext(integrationSettings);
+        String maconomyJobNumber = trafficJob.getExternalCode();
+        
+        CardTableContainer<JobBudget, JobBudgetLine> budgetData = 
+        		mrc.jobBudget().data(String.format("jobnumber=%s", maconomyJobNumber));
+
+        budgetData = updateBudgetType(budgetData, integrationSettings.getMaconomyBudgetType(), mrc);
+    	budgetData = mrc.jobBudget().postToAction("action:reopenbudget", budgetData.card());
+        budgetData = buildAndExecuteMergeActions(budgetData, trafficJob, integrationSettings, mrc);
+        
+        budgetData.card().getData()
+                .setRevisionremark1var(String.format("Synced at %s (UTC) from TrafficLIVE  by %s", 
+                		DATE_TIME_FORMAT.format(Calendar.getInstance().getTime()), getCurrentUserName()));
+        budgetData = updateBudget(budgetData, mrc);
+        budgetData = submitBudget(budgetData, mrc);
+        budgetData = approveBudget(budgetData, mrc);
+        trafficJob.setExternalData(jsonLastUpdatedObject("Last budget sent:"));
+        return trafficJob;
+    }
+    
 	public JobTO mergeJobToMaconomyBudget(JobTO trafficJob, IntegrationDetailsHolder integrationSettings) {
 
         MaconomyPSORestContext mrc = buildMaconomyContext(integrationSettings);
@@ -133,12 +150,7 @@ public class JobToBudgetService {
 
         budgetData = updateBudgetType(budgetData, integrationSettings.getMaconomyBudgetType(), mrc);
     	budgetData = mrc.jobBudget().postToAction("action:reopenbudget", budgetData.card());
-        //Open the existing budget of this type, create non existent trafficlive lines.
-        //Update existing budget lines to the new values from TrafficLIVE.
-        //Delete budget lines that no longer exist.
-        List<BudgetLineAction> budgetLineActions = createMergeLineActions(budgetData, trafficJob, integrationSettings, mrc);
-        budgetData = executeActions(mrc, budgetLineActions);
-        
+        budgetData = buildAndExecuteMergeActions(budgetData, trafficJob, integrationSettings, mrc);
         budgetData.card().getData()
                 .setRevisionremark1var(String.format("Synced at %s (UTC) from TrafficLIVE  by %s", 
                 		DATE_TIME_FORMAT.format(Calendar.getInstance().getTime()), getCurrentUserName()));
@@ -149,105 +161,38 @@ public class JobToBudgetService {
         return trafficJob;
     }
     
-	public List<BudgetLineAction> createMergeLineActions(CardTableContainer<JobBudget, JobBudgetLine> budgetData,
+	public CardTableContainer<JobBudget, JobBudgetLine> buildAndExecuteMergeActions(CardTableContainer<JobBudget, JobBudgetLine> budgetData,
 																			JobTO job,
 																			IntegrationDetailsHolder integrationDetails, 
 																			MaconomyPSORestContext mrc) {
-		//The job is the master in this scenario.  Create a uuid key map.
-		Map<String, JobStageTO> uuidStageMap = job.getJobStages().stream().collect(Collectors.toMap(JobStageTO::getUuid, Function.identity()));
-		Map<String, JobTaskTO> uuidTaskMap = job.getJobTasks().stream().collect(Collectors.toMap(JobTaskTO::getUuid, Function.identity()));
-		Map<String, JobExpenseTO> uuidExpenseMap = job.getJobExpenses().stream().collect(Collectors.toMap(JobExpenseTO::getUuid, Function.identity()));
-		Map<String, JobThirdPartyCostTO> uuidThirdPartyMap = job.getJobThirdPartyCosts().stream().collect(
-																	Collectors.toMap(JobThirdPartyCostTO::getUuid, Function.identity()));
-		//TODO find a clever way to merge this map with Java 8
-		Map<String, HasUuid> uuidJobLineItemMap = new HashMap<>();
-		uuidStageMap.forEach((k,v) -> uuidJobLineItemMap.put(k, v));
-		uuidTaskMap.forEach((k,v) -> uuidJobLineItemMap.put(k, v));
-		uuidExpenseMap.forEach((k,v) -> uuidJobLineItemMap.put(k, v));
-		uuidThirdPartyMap.forEach((k,v) -> uuidJobLineItemMap.put(k, v));
 		
-		//A collection of existing line items mapped to uuid.
-		Map<String, Record<JobBudgetLine>> instanceKeyJobBudgetLineMap = budgetData.tableRecords().stream().collect(
-																	Collectors.toMap(
-																			c -> c.getData().getInstancekey(), 
-																			c -> c));
+		List<BudgetLineAction> lineActions = createMergeLineActions(budgetData, job, integrationDetails, mrc);
 		
-		Record<JobBudgetLine> templateLine = mrc.jobBudget().initTable(budgetData.getPanes().getTable());
+		//Populate any Hierarchy relationships that exist.  It would be nice if the ActionBuilder could do this
+		//but the granularity of the Action prevents it.
+		JobBudgetActionHierarchyPreProcessor hierarchyProcessor =
+				new JobBudgetActionHierarchyPreProcessor(job, budgetData, lineActions, integrationDetails);
 		
-		//Generate a collection of lines actions, based on the state to be merged.
-		JobBudgetMergeActionBuilder actionBuilder = new JobBudgetMergeActionBuilder(objectMapper,
-												uuidJobLineItemMap, instanceKeyJobBudgetLineMap, templateLine, 
-												integrationDetails);
+		lineActions = hierarchyProcessor.process();
 		
-		List<BudgetLineAction> lineActions = actionBuilder.deletes();
-		lineActions.addAll(actionBuilder.creates());
-		lineActions.addAll(actionBuilder.updates());
-		
-		return lineActions;
-	}
-	
-	public JobTO mergeJobToMaconomyBudget2(JobTO trafficJob, IntegrationDetailsHolder integrationSettings) {
-
-        MaconomyPSORestContext mrc = buildMaconomyContext(integrationSettings);
-        String maconomyJobNumber = trafficJob.getExternalCode();
-        
-        CardTableContainer<JobBudget, JobBudgetLine> budgetData = 
-        		mrc.jobBudget().data(String.format("jobnumber=%s", maconomyJobNumber));
-
-        budgetData = updateBudgetType(budgetData, integrationSettings.getMaconomyBudgetType(), mrc);
-    	budgetData = mrc.jobBudget().postToAction("action:reopenbudget", budgetData.card());
-        //Open the existing budget of this type, create non existent trafficlive lines.
-        //Update existing budget lines to the new values from TrafficLIVE.
-        //Delete budget lines that no longer exist.
-        budgetData = mergeJobWithBudget(budgetData, trafficJob, integrationSettings, mrc);
-//        budgetData = deleteNonTrafficBudgetLines(budgetData, integrationSettings, mrc);
-//        budgetData = createBudgetItems(trafficJob, budgetData, integrationSettings, mrc);
-        budgetData.card().getData()
-                .setRevisionremark1var(String.format("Synced at %s (UTC) from TrafficLIVE  by %s", 
-                		DATE_TIME_FORMAT.format(Calendar.getInstance().getTime()), getCurrentUserName()));
-        budgetData = updateBudget(budgetData, mrc);
-        budgetData = submitBudget(budgetData, mrc);
-        budgetData = approveBudget(budgetData, mrc);
-        trafficJob.setExternalData(jsonLastUpdatedObject("Last budget sent:"));
-        return trafficJob;
-    }
-    
-	public CardTableContainer<JobBudget, JobBudgetLine> mergeJobWithBudget(CardTableContainer<JobBudget, JobBudgetLine> budgetData,
-																			JobTO job,
-																			IntegrationDetailsHolder integrationDetails, 
-																			MaconomyPSORestContext mrc) {
-		//The job is the master in this scenario.  Create a uuid key map.
-		Map<String, JobStageTO> uuidStageMap = job.getJobStages().stream().collect(Collectors.toMap(JobStageTO::getUuid, Function.identity()));
-		Map<String, JobTaskTO> uuidTaskMap = job.getJobTasks().stream().collect(Collectors.toMap(JobTaskTO::getUuid, Function.identity()));
-		Map<String, JobExpenseTO> uuidExpenseMap = job.getJobExpenses().stream().collect(Collectors.toMap(JobExpenseTO::getUuid, Function.identity()));
-		Map<String, JobThirdPartyCostTO> uuidThirdPartyMap = job.getJobThirdPartyCosts().stream().collect(
-																	Collectors.toMap(JobThirdPartyCostTO::getUuid, Function.identity()));
-		//TODO find a clever way to merge this map with Java 8
-		Map<String, HasUuid> uuidJobLineItemMap = new HashMap<>();
-		uuidStageMap.forEach((k,v) -> uuidJobLineItemMap.put(k, v));
-		uuidTaskMap.forEach((k,v) -> uuidJobLineItemMap.put(k, v));
-		uuidExpenseMap.forEach((k,v) -> uuidJobLineItemMap.put(k, v));
-		uuidThirdPartyMap.forEach((k,v) -> uuidJobLineItemMap.put(k, v));
-		
-		//A collection of existing line items mapped to uuid.
-		Map<String, Record<JobBudgetLine>> instanceKeyJobBudgetLineMap = budgetData.tableRecords().stream().collect(
-																	Collectors.toMap(
-																			c -> c.getData().getInstancekey(), 
-																			c -> c));
-		
-		Record<JobBudgetLine> templateLine = mrc.jobBudget().initTable(budgetData.getPanes().getTable());
-		
-		//Generate a collection of lines actions, based on the state to be merged.
-		JobBudgetMergeActionBuilder actionBuilder = new JobBudgetMergeActionBuilder(objectMapper,
-												uuidJobLineItemMap, instanceKeyJobBudgetLineMap, templateLine, 
-												integrationDetails);
-		
-		List<BudgetLineAction> lineActions = actionBuilder.deletes();
-		lineActions.addAll(actionBuilder.creates());
-		lineActions.addAll(actionBuilder.updates());
-		
-		executeActions(mrc, lineActions);
+		budgetData = executeActions(mrc, lineActions);
 		return budgetData;
+	}
+
+	public List<BudgetLineAction> createMergeLineActions(CardTableContainer<JobBudget, JobBudgetLine> budgetData,
+			JobTO job, IntegrationDetailsHolder integrationDetails, MaconomyPSORestContext mrc) {
+
+		Record<JobBudgetLine> templateLine = mrc.jobBudget().initTable(budgetData.getPanes().getTable());
+
+		// Generate a collection of lines actions, based on the state to be merged.
+		JobBudgetMergeActionBuilder actionBuilder = new JobBudgetMergeActionBuilder(job, budgetData, objectMapper,
+				templateLine, integrationDetails);
+
+		List<BudgetLineAction> lineActions = actionBuilder.deletes();
+		lineActions.addAll(actionBuilder.creates());
+		lineActions.addAll(actionBuilder.updates());
+
+		return lineActions;
 	}
 
 	/**
@@ -260,8 +205,13 @@ public class JobToBudgetService {
 	 public CardTableContainer<JobBudget, JobBudgetLine> executeActions(MaconomyPSORestContext mrc, List<BudgetLineAction> lineActions) {
 		CardTableContainer<JobBudget, JobBudgetLine> workingBudget = null;
 		Optional<CardTableContainer<JobBudget, JobBudgetLine>> lastBudget = Optional.ofNullable(workingBudget);
-
+		
 		for(BudgetLineAction action : lineActions) {
+
+			if(LOG.isDebugEnabled()) {
+				LOG.debug("Executing Action: "+action);
+			}
+			
 			switch(action.getAction()) {
 				case DELETE:
 					//A DELETE action requires up to date concurrency data, likely from the previous action response 
@@ -272,6 +222,8 @@ public class JobToBudgetService {
 					//a CREATE action required concurrency control of the Card pane.
 					lastBudget.ifPresent(i-> action.getJobBudgetLine().setMeta(i.card().getMeta()));
 					lastBudget =  Optional.of(mrc.jobBudget().create(action.getJobBudgetLine()));
+					//CREATE actions also replace the instancekey with something server generated.
+					replaceInstanceKeys(lineActions, action, lastBudget.get().lastRecord());
 					break;
 				case UPDATE:
 					lastBudget.ifPresent(i -> updateTableRecordMeta(action.getJobBudgetLine(), i));
@@ -284,6 +236,26 @@ public class JobToBudgetService {
 		return lastBudget.get();
 	}
 
+	private void replaceInstanceKeys(List<BudgetLineAction> lineActions, BudgetLineAction executedAction,
+			Record<JobBudgetLine> recentlyCreatedRecord) {
+		//Find all usages of the pre-creation instance key in the action list and replace it with
+		//the server allocated instance key.
+		lineActions.stream()
+				.map(i -> i.getJobBudgetLine().getData())
+				.filter(i ->
+					{
+						return 	i.getParentjobbudgetlineinstancekey() != null &&
+								!i.getParentjobbudgetlineinstancekey().isEmpty() &&
+								i.getParentjobbudgetlineinstancekey()
+								.equals(executedAction.getJobBudgetLine().getData().getInstancekey());
+					})
+				.forEach(i -> 
+					{
+						i.setParentjobbudgetlineinstancekey(recentlyCreatedRecord.getData().getInstancekey());
+					});
+	}
+
+ 
     private void updateTableRecordMeta(Record<JobBudgetLine> jobBudgetLine,
 			CardTableContainer<JobBudget, JobBudgetLine> container) {
     	//If we find a matching record, then update the meta of the line.
@@ -291,7 +263,20 @@ public class JobToBudgetService {
     			container.tableRecords().stream().filter(i -> jobBudgetLine.getData().getInstancekey().equals(
     																i.getData().getInstancekey())
     					).findFirst();
-    	budgetLine.ifPresent(i -> jobBudgetLine.setMeta(i.getMeta()));
+    	
+    	budgetLine.ifPresent(i -> {
+    		if(LOG.isDebugEnabled()) {
+    			try {
+					LOG.debug("Overriding meta: "+this.objectMapper.writeValueAsString(jobBudgetLine.getMeta() + 
+							"\nWith: "+this.objectMapper.writeValueAsString(i.getMeta())));
+				} catch (Exception e) {
+					throw new RuntimeException(e);
+				}
+    		}
+    		jobBudgetLine.setMeta(i.getMeta());	
+    		//We dont just need to override the meta, but the actions also - as the ordering may have changed entirely.
+    		jobBudgetLine.setLinks(i.getLinks());
+    	});
     }
 
 	private String jsonLastUpdatedObject(String label){

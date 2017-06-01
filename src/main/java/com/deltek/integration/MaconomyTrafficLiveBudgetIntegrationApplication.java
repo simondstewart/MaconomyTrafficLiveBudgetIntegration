@@ -8,12 +8,16 @@ import org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfigurat
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 import com.deltek.integration.budget.JobToBudgetService;
 
 @Configuration
 @ComponentScan
-@EnableAutoConfiguration(exclude={HibernateJpaAutoConfiguration.class, DataSourceAutoConfiguration.class, XADataSourceAutoConfiguration.class})
+@EnableScheduling
+@EnableAutoConfiguration(exclude={HibernateJpaAutoConfiguration.class, 
+								  DataSourceAutoConfiguration.class, 
+								  XADataSourceAutoConfiguration.class})
 public class MaconomyTrafficLiveBudgetIntegrationApplication {
 
 	public static void main(String[] args) {

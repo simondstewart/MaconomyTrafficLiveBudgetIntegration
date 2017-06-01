@@ -152,9 +152,10 @@ public class JobToBudgetServiceTest {
 	private JobTO createJob() {
 		JobTO job = new JobTO();
 		JobTaskTO  taskOne = createJobTask("ONE", BigDecimal.ONE, MoneyTO.buildDefaultMoney(1.0f), 
-				PrecisionMoneyTO.buildDefaultMoney(2.0f), new Identifier(1), 1);
+				PrecisionMoneyTO.buildDefaultMoney(2.0f), new Identifier(1), 2);
 		job.getJobTasks().add(taskOne);
-		job.getJobStages().add(createJobStage("STAGE-ONE", Optional.of(taskOne), 2));
+		//Stage ONE is the TOP record, with Task ONE below.
+		job.getJobStages().add(createJobStage("STAGE-ONE", Optional.of(taskOne), 1));
 		job.getJobTasks().add(createJobTask("TWO", BigDecimal.TEN, MoneyTO.buildDefaultMoney(10.0f), 
 								PrecisionMoneyTO.buildDefaultMoney(20.f), new Identifier(1), 3));
 		return job;
@@ -201,6 +202,39 @@ public class JobToBudgetServiceTest {
         cudActions.add(BudgetLineAction.delete(createdBudget.recordAt(0)));
         cudActions.add(BudgetLineAction.delete(createdBudget.recordAt(1)));
         jobToBudgetService.executeActions(restClientContext, cudActions);
+		
+	}
+	
+	@Test
+	public void mergeJob() {
+		//Create a new 2 Task 1 Stage Job.
+		CardTableContainer<JobBudget, JobBudgetLine> budgetData = clearBudget("1020123");
+		JobTO job = createJob();
+		CardTableContainer<JobBudget, JobBudgetLine> createdBudget = 
+				jobToBudgetService.buildAndExecuteMergeActions(budgetData, job , integrationDetails, restClientContext);
+		
+		//Add a new Task and Stage.
+		JobTaskTO task4 = createJobTask("THREE", BigDecimal.ONE, MoneyTO.buildDefaultMoney(10f), PrecisionMoneyTO.buildDefaultMoney(15f), 
+				new Identifier(1), 5);
+
+		job.getJobStages().add(createJobStage("STAGE-TWO", Optional.of(task4), 4));
+		job.getJobTasks().add(task4);
+		CardTableContainer<JobBudget, JobBudgetLine> mergedBudget = 
+				jobToBudgetService.buildAndExecuteMergeActions(createdBudget, job, integrationDetails, restClientContext);
+		
+		//Move existing Task into different existing Stage.
+		JobStageTO stageOne = job.getJobStages().stream().filter(s->s.getDescription().contains("STAGE-ONE")).findAny().get();
+		task4.setJobStageUUID(stageOne.getUuid());
+		CardTableContainer<JobBudget, JobBudgetLine> movedTaskBudget = 
+				jobToBudgetService.buildAndExecuteMergeActions(mergedBudget, job, integrationDetails, restClientContext);
+		
+		//Move existing task into a new Stage.
+		JobStageTO newStage = createJobStage("STAGE-THREE", Optional.of(task4), 6);
+		job.getJobStages().add(newStage);
+		
+		CardTableContainer<JobBudget, JobBudgetLine> movedTaskIntoNewStageBudget = 
+				jobToBudgetService.buildAndExecuteMergeActions(movedTaskBudget, job, integrationDetails, restClientContext);
+		
 		
 	}
 	

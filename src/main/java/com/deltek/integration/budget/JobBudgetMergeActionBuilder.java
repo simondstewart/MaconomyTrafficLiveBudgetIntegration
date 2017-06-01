@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import com.deltek.integration.budget.JobBudgetMergeActionBuilder.BudgetLineAction;
@@ -15,13 +16,17 @@ import com.deltek.integration.budget.domainmapper.AbstractLineBudgetLineMapper;
 import com.deltek.integration.budget.domainmapper.BudgetLineMapper;
 import com.deltek.integration.budget.domainmapper.JobStageBudgetLineMapper;
 import com.deltek.integration.budget.domainmapper.JobTaskBudgetLineMapper;
+import com.deltek.integration.maconomy.domain.CardTableContainer;
+import com.deltek.integration.maconomy.domain.CardTablePanes;
 import com.deltek.integration.maconomy.domain.Record;
+import com.deltek.integration.maconomy.psorestclient.domain.JobBudget;
 import com.deltek.integration.maconomy.psorestclient.domain.JobBudgetLine;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sohnar.trafficlite.transfer.HasUuid;
 import com.sohnar.trafficlite.transfer.expenses.JobExpenseTO;
 import com.sohnar.trafficlite.transfer.project.AbstractLineItemTO;
 import com.sohnar.trafficlite.transfer.project.JobStageTO;
+import com.sohnar.trafficlite.transfer.project.JobTO;
 import com.sohnar.trafficlite.transfer.project.JobTaskTO;
 import com.sohnar.trafficlite.transfer.project.JobThirdPartyCostTO;
 
@@ -40,21 +45,41 @@ public class JobBudgetMergeActionBuilder {
 	private final Record<JobBudgetLine> templateLine;
 	private final Map<Class<?>, BudgetLineMapper<? extends HasUuid>> mapperLookup;
 	private final IntegrationDetailsHolder integrationDetails;
+	private final Map<String, JobStageTO> uuidStageMap;
+	private final Map<String, JobTaskTO> uuidTaskMap;
+	private List<? extends BudgetLineAction> creates;
 
-	public JobBudgetMergeActionBuilder(
-			ObjectMapper objectMapper,
-			Map<String, HasUuid> uuidJobLineItemMap,
-			Map<String, Record<JobBudgetLine>> instanceKeyJobBudgetLineMap, 
-			Record<JobBudgetLine> templateLine,
-			IntegrationDetailsHolder integrationDetails) {
+	
+	public JobBudgetMergeActionBuilder(JobTO job, CardTableContainer<JobBudget, JobBudgetLine> budgetData, ObjectMapper objectMapper,
+			Record<JobBudgetLine> templateLine, IntegrationDetailsHolder integrationDetals) {
 		this.objectMapper = objectMapper;
-		this.uuidJobLineItemMap = uuidJobLineItemMap;
-		this.instanceKeyJobBudgetLineMap = instanceKeyJobBudgetLineMap;
+		this.integrationDetails = integrationDetals;
 		this.templateLine = templateLine;
-		this.mapperLookup = buildMapperLookup(integrationDetails);
-		this.integrationDetails = integrationDetails;
-	}
+		
+		//The job is the master in this scenario.  Create a uuid key map.
+		uuidStageMap = job.getJobStages().stream().collect(Collectors.toMap(JobStageTO::getUuid, Function.identity()));
+		uuidTaskMap = job.getJobTasks().stream().collect(Collectors.toMap(JobTaskTO::getUuid, Function.identity()));
+		Map<String, JobExpenseTO> uuidExpenseMap = job.getJobExpenses().stream().collect(Collectors.toMap(JobExpenseTO::getUuid, Function.identity()));
+		Map<String, JobThirdPartyCostTO> uuidThirdPartyMap = job.getJobThirdPartyCosts().stream().collect(
+																	Collectors.toMap(JobThirdPartyCostTO::getUuid, Function.identity()));
+		
+		mapperLookup = buildMapperLookup(integrationDetals);
+		//TODO find a clever way to merge this map with Java 8
+//		Map<String, HasUuid> uuidJobLineItemMap = new HashMap<>();
+		uuidJobLineItemMap = new HashMap<>();
+		uuidStageMap.forEach((k,v) -> uuidJobLineItemMap.put(k, v));
+		uuidTaskMap.forEach((k,v) -> uuidJobLineItemMap.put(k, v));
+		uuidExpenseMap.forEach((k,v) -> uuidJobLineItemMap.put(k, v));
+		uuidThirdPartyMap.forEach((k,v) -> uuidJobLineItemMap.put(k, v));
+		
+		//A collection of existing line items mapped to uuid.
+		instanceKeyJobBudgetLineMap = budgetData.tableRecords().stream().collect(
+																	Collectors.toMap(
+																			c -> c.getData().getInstancekey(), 
+																			c -> c));
 
+	}
+	
 	public List<BudgetLineAction> deletes() {
     	List<BudgetLineAction> lineActions = new ArrayList<>();
 
@@ -90,10 +115,11 @@ public class JobBudgetMergeActionBuilder {
 				}
 					
 			});
+		
     	lineActions.sort(Comparator.comparing(i -> i.getJobBudgetLine().getData().getLinenumber()));
 		return lineActions;
 	}
-
+	
 	public List<? extends BudgetLineAction> updates() {
 		List<BudgetLineAction> lineActions = new ArrayList<>();
 		instanceKeyJobBudgetLineMap.entrySet().forEach(budgetEntry -> {
@@ -159,14 +185,16 @@ public class JobBudgetMergeActionBuilder {
     	
     	private Action action;
     	private Record<JobBudgetLine> jobBudgetLine;
-
+    	private Optional<Record<JobBudgetLine>> parentJobBudgetLine;
+    	
     	public BudgetLineAction(Action action, Record<JobBudgetLine> jobBudgetLine) {
 			super();
 			this.action = action;
 			this.jobBudgetLine = jobBudgetLine;
+			this.parentJobBudgetLine = Optional.empty();
 		}
     	
-		public static BudgetLineAction delete(Record<JobBudgetLine> value) {
+    	public static BudgetLineAction delete(Record<JobBudgetLine> value) {
 			return new BudgetLineAction(Action.DELETE, value);
 		}
 		public static BudgetLineAction update(Record<JobBudgetLine> value) {
@@ -181,6 +209,23 @@ public class JobBudgetMergeActionBuilder {
 		}
 		public Record<JobBudgetLine> getJobBudgetLine() {
 			return jobBudgetLine;
+		}
+
+		public Optional<Record<JobBudgetLine>> getParentJobBudgetLine() {
+			return parentJobBudgetLine;
+		}
+
+		public String tlUUID(String uuidPropName) {
+			return jobBudgetLine.getData().lookupTrafficUUID(uuidPropName);
+		}
+		
+		public String macUUID() {
+			return jobBudgetLine.getData().getInstancekey();
+		}
+		
+		@Override
+		public String toString() {
+			return "BudgetLineAction [action=" + action + ", jobBudgetLine=" + jobBudgetLine.getData().getInstancekey() +"]";
 		}
 		
     }

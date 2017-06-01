@@ -36,21 +36,25 @@
 			<artifactId>spring-boot-starter-test</artifactId>
 			<scope>test</scope>
 		</dependency>
-		
-	
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-actuator</artifactId>
+		</dependency>
+
+		<!-- 	
         <dependency>
             <groupId>com.sohnar</groupId>
             <artifactId>TrafficLiteSharedData</artifactId>
             <version>11.0.0-FINAL</version>
         </dependency>
-
-		<!-- 
+ 		-->
+ 		
         <dependency>
 			<groupId>com.deltek.integration.trafficlive</groupId>
 			<artifactId>TrafficLiveRestClient</artifactId>
 			<version>0.0.1-SNAPSHOT</version>
 		</dependency>
- 		-->        
+
 		<dependency>
 			<groupId>com.deltek.integration.maconomy</groupId>
 			<artifactId>MaconomyRestClient</artifactId>

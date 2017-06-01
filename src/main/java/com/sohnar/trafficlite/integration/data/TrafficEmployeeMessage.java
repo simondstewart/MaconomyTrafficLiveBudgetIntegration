@@ -2,37 +2,30 @@ package com.sohnar.trafficlite.integration.data;
 
 import java.io.Serializable;
 
+import com.sohnar.trafficlite.datamodel.enums.event.TrafficEmployeeEventType;
+import com.sohnar.trafficlite.transfer.BaseTO;
+import com.sohnar.trafficlite.transfer.Identifier;
 import com.sohnar.trafficlite.transfer.event.MessageRestrictionsTO;
 import com.sohnar.trafficlite.transfer.event.TrafficEmployeeEventTO;
 
 
-public class TrafficEmployeeMessage implements Serializable {
+public class TrafficEmployeeMessage<TO extends BaseTO> implements Serializable {
 
 	private static final long serialVersionUID = 1L;
 	private Long trafficEmployeeId;
 	private String description;
-	private TrafficEmployeeEventTO<?> trafficEmployeeEvent;
+	final private TrafficEmployeeEventTO<TO> trafficEmployeeEvent;
     private MessageRestrictionsTO restrictions;
 	private Throwable exception;
     
-	public TrafficEmployeeMessage(Long trafficEmployeeId, String description) {
+	public TrafficEmployeeMessage(TrafficEmployeeEventType eventType, Long trafficEmployeeId, String description) {
 		super();
 		this.trafficEmployeeId = trafficEmployeeId;
 		this.description = description;
-	}
-
-	public TrafficEmployeeMessage(Long trafficEmployeeId, String description, MessageRestrictionsTO restrictions) {
-		super();
-		this.trafficEmployeeId = trafficEmployeeId;
-		this.description = description;
-        this.restrictions = restrictions;
-	}
-
-	public TrafficEmployeeMessage(Long trafficEmployeeId, String description, Throwable exception) {
-		super();
-		this.trafficEmployeeId = trafficEmployeeId;
-		this.description = description;
-		this.exception = exception;
+		trafficEmployeeEvent = new TrafficEmployeeEventTO();
+		trafficEmployeeEvent.setTrafficEmployeeEventType(eventType);
+		trafficEmployeeEvent.setTrafficEmployeeId(new Identifier(trafficEmployeeId));
+		trafficEmployeeEvent.setDescription(description);
 	}
 
 	public Long getTrafficEmployeeId() {
@@ -48,13 +41,8 @@ public class TrafficEmployeeMessage implements Serializable {
 		this.description = message;
 	}
 
-	public TrafficEmployeeEventTO<?> getTrafficEmployeeEvent() {
+	public TrafficEmployeeEventTO<TO> getTrafficEmployeeEvent() {
 		return trafficEmployeeEvent;
-	}
-
-	public void setTrafficEmployeeEvent(
-			TrafficEmployeeEventTO<?> trafficEmployeeEvent) {
-		this.trafficEmployeeEvent = trafficEmployeeEvent;
 	}
 
     public MessageRestrictionsTO getRestrictions() {
