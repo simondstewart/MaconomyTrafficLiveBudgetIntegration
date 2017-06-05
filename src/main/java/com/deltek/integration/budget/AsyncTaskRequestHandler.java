@@ -50,6 +50,15 @@ public class AsyncTaskRequestHandler {
 		
 	}
     
+	/**
+	 * Accept the new Message, extract the Maconomy and TrafficLIVE API Credentials and Run the Merging Logic.
+	 * 
+	 * Update the Job once the merge succeds and fire off a success event to the topic so the user is notified of completion.
+	 * 
+	 * An Error event will also be fired if this logic fails for any reason.
+	 * 
+	 * @param asyncRequestMessage
+	 */
 	private void processBackgroundTaskRequest(AsyncTaskMessage<ErpIntegrationSettingsTO, JobTO> asyncRequestMessage) {
 		JobTO job = asyncRequestMessage.getEmployeeMessage().getTrafficEmployeeEvent().getUpdatedLightweightTO();
 		ErpIntegrationSettingsTO settings = asyncRequestMessage.getData();

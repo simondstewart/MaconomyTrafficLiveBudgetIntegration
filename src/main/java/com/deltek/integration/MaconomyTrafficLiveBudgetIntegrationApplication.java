@@ -5,6 +5,7 @@ import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
 import org.springframework.boot.autoconfigure.jdbc.XADataSourceAutoConfiguration;
 import org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration;
+import org.springframework.boot.autoconfigure.solr.SolrAutoConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.Configuration;
@@ -15,9 +16,13 @@ import com.deltek.integration.budget.JobToBudgetService;
 @Configuration
 @ComponentScan
 @EnableScheduling
+//Autoconfig needs careful exclusion, as the imports from our dependencies
+//(e.g. TrafficLiveSharedData for example which could be made much more lightweight)
+//contain autoconfig classes that are automatically bootstrapped.
 @EnableAutoConfiguration(exclude={HibernateJpaAutoConfiguration.class, 
 								  DataSourceAutoConfiguration.class, 
-								  XADataSourceAutoConfiguration.class})
+								  XADataSourceAutoConfiguration.class,
+								  SolrAutoConfiguration.class})
 public class MaconomyTrafficLiveBudgetIntegrationApplication {
 
 	public static void main(String[] args) {
