@@ -32,5 +32,10 @@ public class AsyncTaskMessage<DATA extends Serializable, TO extends BaseTO> impl
 	public DATA getData() {
 		return data;
 	}
+
+	@Override
+	public String toString() {
+		return "AsyncTaskMessage [type=" + type + ", employeeMessage=" + employeeMessage + ", data=" + data + "]";
+	}
 	
 }

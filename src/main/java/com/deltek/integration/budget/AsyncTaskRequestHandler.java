@@ -1,6 +1,5 @@
 package com.deltek.integration.budget;
 
-import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.ExecutorService;
@@ -9,11 +8,14 @@ import java.util.stream.Collectors;
 
 import javax.annotation.Resource;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.springframework.integration.annotation.ServiceActivator;
 
 import com.deltek.integration.BrokerAndIntegrationConfiguration;
 import com.deltek.integration.BrokerAndIntegrationConfiguration.EmployeeMessageGateway;
 import com.deltek.integration.trafficlive.service.TrafficLiveRestClient;
+import com.sohnar.service.TrafficServiceException;
 import com.sohnar.trafficlite.datamodel.enums.event.TrafficEmployeeEventType;
 import com.sohnar.trafficlite.integration.data.TrafficEmployeeMessage;
 import com.sohnar.trafficlite.integration.data.async.AsyncTaskMessage;
@@ -28,21 +30,22 @@ import com.sohnar.utils.TrafficStringEncryptionUtil;
 
 public class AsyncTaskRequestHandler {
 
+	private static final Log LOG = LogFactory.getLog(AsyncTaskRequestHandler.class);
+
 	@Resource
 	private JobToBudgetService jobToBudgetService;
 	
     @Resource
     private EmployeeMessageGateway employeeMessageGateway;
  
-	private final ExecutorService executorService = java.util.concurrent.Executors.newFixedThreadPool(1);
-	
-	private final Random random = new Random();
-	
 	@ServiceActivator(inputChannel=BrokerAndIntegrationConfiguration.MACONOMY_BUDGET_ASYNC_REQUEST_CHANNEL)
 	public void handleBackgroundTaskRequest(AsyncTaskMessage<ErpIntegrationSettingsTO, JobTO> asyncRequestMessage) {
 		try {
 			processBackgroundTaskRequest(asyncRequestMessage);
 		} catch (Throwable t) {
+			if(LOG.isErrorEnabled()) {
+				LOG.error("Exception Processing AsyncTaskMessage "+asyncRequestMessage, t);
+			}
 			employeeMessageGateway.sendMessage(
 					createErrorMessage(asyncRequestMessage.getEmployeeMessage().getTrafficEmployeeId(), 
 							asyncRequestMessage.getEmployeeMessage().getTrafficEmployeeEvent().getUpdatedLightweightTO(), t));
@@ -98,25 +101,6 @@ public class AsyncTaskRequestHandler {
 		return integrationDetails;
 	}
 
-	private void simulateMessageFlow(JobTO job, TrafficEmployeeMessage<JobTO> requestMessage) {
-        executorService.submit(()-> {
-			try {
-				Thread.sleep(10 * 1000);
-			} catch (Exception e) {
-				e.printStackTrace();
-			}
-			if(random.nextBoolean()) {
-				//This only simulated the interaction.  The processor will handle this event - there will be no user context.
-				employeeMessageGateway.sendMessage(createCompleteMessage(
-						TrafficEmployeeEventType.BACKGROUND_TASK_COMPLETE, requestMessage.getTrafficEmployeeId(), job, 
-						"Test Maconomy Sync Background Task Completed for Job Number: "+job.getJobNumber()));
-			} else {
-				employeeMessageGateway.sendMessage(
-						createErrorMessage(requestMessage.getTrafficEmployeeId(), job, new RuntimeException("Error with Simulation!")));
-			}
-		});
-	}
-
 	//Broadcast a complete back to the user.
 	private <TO extends BaseTO> TrafficEmployeeMessage<TO> createCompleteMessage(TrafficEmployeeEventType backgroundTaskComplete,
 			Long trafficEmployeeId, TO to, String description) {
@@ -130,7 +114,10 @@ public class AsyncTaskRequestHandler {
 	private <TO extends BaseTO> TrafficEmployeeMessage<TO> createErrorMessage(Long trafficEmployeeId, TO item, Throwable throwable) {
 		TrafficEmployeeMessage<TO> message = new TrafficEmployeeMessage<>(TrafficEmployeeEventType.BACKGROUND_TASK_ERROR, 
 												trafficEmployeeId, "Error Encountered During Maconomy Integation Background Processing.");
-		message.setException(new BudgetIntegrationException("Error Encountered During Maconomy Integation Background Processing.", throwable));
+		//Forge a stack trace so the client doesnt need to have the exception class.
+		TrafficServiceException serviceException = new TrafficServiceException("Error Encountered During Maconomy Integation Background Processing. \n"+throwable.getMessage());
+		serviceException.setStackTrace(throwable.getStackTrace());
+		message.setException(serviceException);
 		message.getTrafficEmployeeEvent().setUpdatedLightweightTO(item);
 		return message;
 	}

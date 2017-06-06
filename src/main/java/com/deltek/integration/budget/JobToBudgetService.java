@@ -48,6 +48,11 @@ public class JobToBudgetService {
      */
 	public JobTO mergeJobToMaconomyBudget(JobTO trafficJob, IntegrationDetailsHolder integrationSettings) {
 
+		if(LOG.isInfoEnabled()) {
+			LOG.info("Attempting to merge TrafficLIVE Job Number: " +trafficJob.getJobNumber() 
+			+ " with Maconomy server: "+integrationSettings.getMacaonomyRestServiceURLBase());
+		}
+		
         MaconomyPSORestContext mrc = buildMaconomyContext(integrationSettings);
         String maconomyJobNumber = trafficJob.getExternalCode();
         
@@ -55,7 +60,11 @@ public class JobToBudgetService {
         		mrc.jobBudget().data(String.format("jobnumber=%s", maconomyJobNumber));
 
         budgetData = updateBudgetType(budgetData, integrationSettings.getMaconomyBudgetType(), mrc);
-    	budgetData = mrc.jobBudget().postToAction("action:reopenbudget", budgetData.card());
+
+        if(budgetData.card().hasAction("action:reopenbudget")) {
+        	budgetData = mrc.jobBudget().postToAction("action:reopenbudget", budgetData.card());
+        }
+        
         budgetData = buildAndExecuteMergeActions(budgetData, trafficJob, integrationSettings, mrc);
         budgetData.card().getData()
                 .setRevisionremark1var(String.format("Synced at %s (UTC) from TrafficLIVE  by %s", 
@@ -80,6 +89,8 @@ public class JobToBudgetService {
 				new JobBudgetActionHierarchyPreProcessor(job, budgetData, lineActions, integrationDetails);
 		
 		lineActions = hierarchyProcessor.process();
+		if(lineActions.isEmpty()) 
+			return budgetData;
 		
 		budgetData = executeActions(mrc, lineActions);
 		return budgetData;

@@ -15,7 +15,6 @@ import com.deltek.integration.budget.JobToBudgetService;
 
 @Configuration
 @ComponentScan
-@EnableScheduling
 //Autoconfig needs careful exclusion, as the imports from our dependencies
 //(e.g. TrafficLiveSharedData for example which could be made much more lightweight)
 //contain autoconfig classes that are automatically bootstrapped.

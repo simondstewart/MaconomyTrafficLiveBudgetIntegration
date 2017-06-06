@@ -61,7 +61,6 @@ public class BrokerAndIntegrationConfiguration {
 				Jms.messageDrivenChannelAdapter(pooledConnectionFactory).destination(queue))
 				.channel("fromJmsQueueChannel")
 				.filter(GenericMessage.class, i -> i.getPayload().getClass().equals(AsyncTaskMessage.class) )
-//				.handle(h -> System.out.println("A MESSAGE HAS ARRIVED: "+h))
 				.filter(AsyncTaskMessage.class, i -> "MACONOMY_BUDGET".equals(i.getType()))
 				.channel(MACONOMY_BUDGET_ASYNC_REQUEST_CHANNEL)
 				.get();
@@ -88,32 +87,6 @@ public class BrokerAndIntegrationConfiguration {
 	 * @param topic
 	 * @return
 	 */
-//	@Bean
-//	public IntegrationFlow topicIn(PooledConnectionFactory pooledConnectionFactory, Topic topic) {
-//		return IntegrationFlows.from(
-//				Jms.messageDrivenChannelAdapter(pooledConnectionFactory).destination(topic).errorChannel(INTEGRATION_ERROR_CHANNEL))
-//				.channel("fromJmsMessageChannel")
-//				.filter(TrafficEmployeeMessage.class::equals)
-//				.filter(TrafficEmployeeMessage.class, f -> TrafficEmployeeEventType.BACKGROUND_TASK_REQUSTED.equals(
-//							f.getTrafficEmployeeEvent().getTrafficEmployeeEventType()))
-//				.channel(BACKGROUND_TASK_REQUEST_CHANNEL)
-//				.get();
-//	}
-//	
-//	@Bean
-//	public IntegrationFlow employeeChannelFlow() {
-//		return IntegrationFlows.from("fromJmsMessageChannel")
-//	.route(payload -> payload.getClass().getName(), 
-//			m -> m.suffix("Channel")
-//			.channelMapping(TrafficCompanyMessage.class.getTypeName(), "company")
-//			.channelMapping(TrafficEmployeeMessage.class.getTypeName(), "employee"))
-//		  .filter(TrafficEmployeeMessage.class, f -> TrafficEmployeeEventType.BACKGROUND_TASK_REQUSTED.equals(
-//				  											f.getTrafficEmployeeEvent().getTrafficEmployeeEventType()))		
-//		  .channel(BACKGROUND_TASK_REQUEST_CHANNEL)
-//		  .handle(System.out::println)
-//		  .get();
-//	}
-
 	@Bean
 	public IntegrationFlow errorFlow() {
 		return IntegrationFlows.from(INTEGRATION_ERROR_CHANNEL)
