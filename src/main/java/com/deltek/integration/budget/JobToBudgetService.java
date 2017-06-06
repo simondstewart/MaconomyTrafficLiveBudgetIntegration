@@ -270,7 +270,7 @@ public class JobToBudgetService {
 					LOG.debug("Overriding meta: "+this.objectMapper.writeValueAsString(jobBudgetLine.getMeta() + 
 							"\nWith: "+this.objectMapper.writeValueAsString(i.getMeta())));
 				} catch (Exception e) {
-					throw new RuntimeException(e);
+					throw new BudgetIntegrationException(e);
 				}
     		}
     		jobBudgetLine.setMeta(i.getMeta());	

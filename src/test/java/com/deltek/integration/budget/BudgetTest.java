@@ -3,6 +3,8 @@ package com.deltek.integration.budget;
 import java.util.ArrayList;
 import java.util.List;
 
+import javax.annotation.Resource;
+
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.junit.Assert;
@@ -14,8 +16,10 @@ import org.junit.runner.RunWith;
 import org.junit.runners.BlockJUnit4ClassRunner;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 
+import com.deltek.integration.ApplicationConfiguration;
 import com.deltek.integration.budget.JobBudgetMergeActionBuilder.BudgetLineAction;
 import com.deltek.integration.maconomy.client.APIContainerHelper;
 import com.deltek.integration.maconomy.client.MaconomyRestClient;
@@ -35,11 +39,15 @@ import com.deltek.integration.maconomy.psorestclient.domain.JobBudgetLine;
 import com.deltek.integration.maconomy.psorestclient.domain.Journal;
 
 @RunWith(SpringJUnit4ClassRunner.class)
+@ContextConfiguration(classes=ApplicationConfiguration.class)
 public class BudgetTest {
 
 	private final Log log = LogFactory.getLog(getClass());
 	
 	private MaconomyPSORestContext restClientContext;
+	
+	@Resource
+	private JobToBudgetService jobToBudgetService;
 	
 	@Rule
 	public ExpectedException expectedEx = ExpectedException.none();
@@ -85,7 +93,6 @@ public class BudgetTest {
         budgetData = restClientContext.jobBudget().update(budgetData.card());
         budgetData = restClientContext.jobBudget().postToAction("action:removebudget", budgetData.card());
         
-        JobToBudgetService jobToBudgetService = new JobToBudgetService();
         List<BudgetLineAction> lineActions = new ArrayList<>();
         Record<JobBudgetLine> budgetLine = restClientContext.jobBudget().initTable(budgetData.getPanes().getTable());
         budgetLine.getData().setText("ONE");
@@ -172,16 +179,15 @@ public class BudgetTest {
         Record<JobBudgetLine> newRecord = budgetData.tableRecords().get(0);
         newRecord.getData().setText("UPDATED LINE");
         
-        CardTableContainer<JobBudget, JobBudgetLine> updatedRecord = restClientContext.jobBudget().update(newRecord);
+        CardTableContainer<JobBudget, JobBudgetLine> updatedBudget = restClientContext.jobBudget().update(newRecord);
         
-        //Store table record to delete, see if another line update prevents action due to concurrency control 
-        Record<JobBudgetLine> budgetLineToDelete = budgetData.tableRecords().get(0);
+        Record<JobBudgetLine> budgetLineToDelete = updatedBudget.tableRecords().get(0);
         
         //Create a new line.
         budgetLine.getData().setText("Simons Sample Line TWO");
         budgetData = restClientContext.jobBudget().postToAction("action:create", budgetLine);
 
-        //Delete the first line.
+        //Delete an existing line.
         budgetData = restClientContext.jobBudget().deleteTableRecord(budgetLineToDelete);
         
 
