@@ -47,11 +47,6 @@ public class JobToBudgetService {
      * 
      */
 	public JobTO mergeJobToMaconomyBudget(JobTO trafficJob, IntegrationDetailsHolder integrationSettings) {
-
-		if(LOG.isInfoEnabled()) {
-			LOG.info("Attempting to merge TrafficLIVE Job Number: " +trafficJob.getJobNumber() 
-			+ " with Maconomy server: "+integrationSettings.getMacaonomyRestServiceURLBase());
-		}
 		
         MaconomyPSORestContext mrc = buildMaconomyContext(integrationSettings);
         String maconomyJobNumber = trafficJob.getExternalCode();

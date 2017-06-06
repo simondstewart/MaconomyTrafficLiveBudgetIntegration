@@ -41,14 +41,6 @@
 			<artifactId>spring-boot-starter-actuator</artifactId>
 		</dependency>
 
-		<!-- 	
-        <dependency>
-            <groupId>com.sohnar</groupId>
-            <artifactId>TrafficLiteSharedData</artifactId>
-            <version>11.0.0-FINAL</version>
-        </dependency>
- 		-->
- 		
         <dependency>
 			<groupId>com.deltek.integration.trafficlive</groupId>
 			<artifactId>TrafficLiveRestClient</artifactId>

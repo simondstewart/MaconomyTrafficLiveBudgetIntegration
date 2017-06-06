@@ -60,5 +60,12 @@ public class TrafficEmployeeMessage<TO extends BaseTO> implements Serializable {
 	public void setException(Throwable exception) {
 		this.exception = exception;
 	}
+
+	@Override
+	public String toString() {
+		return "TrafficEmployeeMessage [trafficEmployeeId=" + trafficEmployeeId + ", description=" + description
+				+ ", trafficEmployeeEvent=" + (trafficEmployeeEvent!=null ?trafficEmployeeEvent.getTrafficEmployeeEventType():"") + ", exception="
+				+ exception + "]";
+	}
     
 }

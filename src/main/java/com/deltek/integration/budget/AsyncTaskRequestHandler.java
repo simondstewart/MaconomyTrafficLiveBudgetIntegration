@@ -66,6 +66,12 @@ public class AsyncTaskRequestHandler {
 		JobTO job = asyncRequestMessage.getEmployeeMessage().getTrafficEmployeeEvent().getUpdatedLightweightTO();
 		ErpIntegrationSettingsTO settings = asyncRequestMessage.getData();
 
+		if(LOG.isInfoEnabled()) {
+			LOG.info("Background Task ARRIVED for user: "+settings.getTrafficLiveServiceUser() + 
+			" to merge TrafficLIVE Job Number: " +job.getJobNumber() 
+			+ " with Maconomy server: "+settings.getMaconomyRESTServiceURLBase());
+		}
+		
 		String apiPassword = TrafficStringEncryptionUtil.decrypt(settings.getTrafficLiveServicePassword());
 		
 		TrafficLiveRestClient tlc = new TrafficLiveRestClient(settings.getTrafficLiveServiceUser(), 
@@ -77,9 +83,15 @@ public class AsyncTaskRequestHandler {
 		JobTO updatedJob = tlc.job().update(jobTO);
 
 		//All good, broadcast a completion message back to the client.
-		employeeMessageGateway.sendMessage(createCompleteMessage(
+		 TrafficEmployeeMessage<JobTO> completeMessage = createCompleteMessage(
 				TrafficEmployeeEventType.BACKGROUND_TASK_COMPLETE, asyncRequestMessage.getEmployeeMessage().getTrafficEmployeeId(), job, 
-				"Test Maconomy Sync Background Task Completed for Job Number: "+job.getJobNumber()));
+				"Test Maconomy Sync Background Task Completed for Job Number: "+job.getJobNumber());
+		 
+		if(LOG.isInfoEnabled()) {
+			LOG.info("Background Task COMPLETED for integration user: "+ settings.getTrafficLiveServiceUser()+ " sending message: "+completeMessage);
+		}
+		
+		employeeMessageGateway.sendMessage(completeMessage);
 	}
 	
 	private IntegrationDetailsHolder createIntegrationDetailsHolder(TrafficLiveRestClient tlc,
