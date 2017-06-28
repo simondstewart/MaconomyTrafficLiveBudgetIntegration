@@ -129,7 +129,7 @@
 
 	<scm>
 		<developerConnection>scm:git:https://github.com/simondstewart/MaconomyTrafficLiveBudgetIntegration</developerConnection>
-	  <tag>andrea_test</tag>
+	  <tag>HEAD</tag>
   </scm>
 
 	<build>
