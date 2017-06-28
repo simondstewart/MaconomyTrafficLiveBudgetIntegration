@@ -129,7 +129,7 @@
 	</dependencies>
 
 	<scm>
-		<developerConnection>scm:git:https://github.com/simondstewart/TrafficLiveRestClient</developerConnection>
+		<developerConnection>scm:git:https://github.com/simondstewart/MaconomyTrafficLiveBudgetIntegration</developerConnection>
 	</scm>
 
 	<build>
