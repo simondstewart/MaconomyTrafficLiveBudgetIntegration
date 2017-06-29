@@ -40,6 +40,28 @@
 		</snapshotRepository>
 	</distributionManagement>
 
+    <repositories>
+        <repository>
+            <snapshots>
+                <enabled>false</enabled>
+            </snapshots>
+            <id>central</id>
+            <name>libs-release</name>
+            <url>https://mvn.sohnar.com/artifactory/libs-release</url>
+        </repository>
+    </repositories>
+
+    <pluginRepositories>
+        <pluginRepository>
+            <snapshots>
+                <enabled>false</enabled>
+            </snapshots>
+            <id>central</id>
+            <name>plugins-release</name>
+            <url>https://mvn.sohnar.com/artifactory/plugins-release</url>
+        </pluginRepository>
+    </pluginRepositories>
+
 	<dependencies>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>

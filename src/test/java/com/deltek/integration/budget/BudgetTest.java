@@ -20,6 +20,7 @@ import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 
 import com.deltek.integration.ApplicationConfiguration;
+import com.deltek.integration.MaconomyTrafficLiveBudgetIntegrationApplication;
 import com.deltek.integration.budget.JobBudgetMergeActionBuilder.BudgetLineAction;
 import com.deltek.integration.maconomy.client.APIContainerHelper;
 import com.deltek.integration.maconomy.client.MaconomyRestClient;
@@ -39,24 +40,35 @@ import com.deltek.integration.maconomy.psorestclient.domain.JobBudgetLine;
 import com.deltek.integration.maconomy.psorestclient.domain.Journal;
 
 @RunWith(SpringJUnit4ClassRunner.class)
-@ContextConfiguration(classes=ApplicationConfiguration.class)
+@SpringBootTest(classes=MaconomyTrafficLiveBudgetIntegrationApplication.class)
 public class BudgetTest {
 
 	private final Log log = LogFactory.getLog(getClass());
 	
 	private MaconomyPSORestContext restClientContext;
 	
+	private String testJobNumber;
+	
 	@Resource
 	private JobToBudgetService jobToBudgetService;
 	
 	@Rule
 	public ExpectedException expectedEx = ExpectedException.none();
-	
+
+	private String budgetType;
+
 	@Before
 	public void setup() {
-		 MaconomyRestClient mrc = new MaconomyRestClient("Administrator", "123456", 
-				 					"http://193.17.206.161:4111/containers/v1/x1demo");
-		 restClientContext = new MaconomyPSORestContext(mrc);
+//		 MaconomyRestClient mrc222 = new MaconomyRestClient("Administrator", "123456", 
+//					"http://193.17.206.162:4111/containers/v1/x1demo");
+//		 testJobNumber = "1020123"; 
+//		 budgetType = "baseline";
+		
+		 MaconomyRestClient mrc233 = new MaconomyRestClient("Administrator", "123456", 
+				 					"http://193.17.206.161:4111/containers/v1/xdemo1");
+		 testJobNumber = "10250003";
+		 budgetType = "Reference";
+		 restClientContext = new MaconomyPSORestContext(mrc233);
 	}
 	
 	@Test
@@ -77,19 +89,19 @@ public class BudgetTest {
 	@Test
 	public void getDataThenUpdate() {
         CardTableContainer<JobBudget, JobBudgetLine> budgetData = 
-        		restClientContext.jobBudget().data(String.format("jobnumber=%s", "1020123"));
+        		restClientContext.jobBudget().data(String.format("jobnumber=%s", testJobNumber));
         
         Record<JobBudget> budget = budgetData.getPanes().getCard().getRecords().get(0);
-        budget.getData().setShowbudgettypevar("baseline");
+        budget.getData().setShowbudgettypevar(budgetType);
         budgetData = restClientContext.jobBudget().update(budget);
 	}
 	
 	@Test
 	public void executeActions() {
         CardTableContainer<JobBudget, JobBudgetLine> budgetData = 
-        		restClientContext.jobBudget().data(String.format("jobnumber=%s", "1020123"));
+        		restClientContext.jobBudget().data(String.format("jobnumber=%s", testJobNumber));
         
-        budgetData.card().getData().setShowbudgettypevar("Baseline");
+        budgetData.card().getData().setShowbudgettypevar(budgetType);
         budgetData = restClientContext.jobBudget().update(budgetData.card());
         budgetData = restClientContext.jobBudget().postToAction("action:removebudget", budgetData.card());
         
@@ -105,7 +117,7 @@ public class BudgetTest {
 		
 		//Lets take the 5 line budget created, remove lines, update lines and create lines and see the effect on concurrency control.
         CardTableContainer<JobBudget, JobBudgetLine> createdBudget = 
-        		restClientContext.jobBudget().data(String.format("jobnumber=%s", "1020123"));
+        		restClientContext.jobBudget().data(String.format("jobnumber=%s", testJobNumber));
         
         List<BudgetLineAction> cudActions = new ArrayList<>();
         cudActions.add(BudgetLineAction.delete(createdBudget.recordAt(0)));
@@ -127,9 +139,9 @@ public class BudgetTest {
 	@Test
 	public void createMultipleLines() {
         CardTableContainer<JobBudget, JobBudgetLine> budgetData = 
-        		restClientContext.jobBudget().data(String.format("jobnumber=%s", "1020123"));
+        		restClientContext.jobBudget().data(String.format("jobnumber=%s", testJobNumber));
         
-        budgetData.card().getData().setShowbudgettypevar("Baseline");
+        budgetData.card().getData().setShowbudgettypevar(budgetType);
         budgetData = restClientContext.jobBudget().update(budgetData.card());
         budgetData = restClientContext.jobBudget().postToAction("action:removebudget", budgetData.card());
         
@@ -168,7 +180,7 @@ public class BudgetTest {
 	public void reopenBudgetDeleteLines() {
 		
         CardTableContainer<JobBudget, JobBudgetLine> budgetData = 
-        		restClientContext.jobBudget().data(String.format("jobnumber=%s", "1020123"));
+        		restClientContext.jobBudget().data(String.format("jobnumber=%s", testJobNumber));
 
 //        budgetData = restClientContext.jobBudget().postToAction("action:reopenbudget", budgetData.card());
         budgetData = restClientContext.jobBudget().postToAction("action:removebudget", budgetData.card());
