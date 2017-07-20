@@ -2,6 +2,7 @@ package com.deltek.integration.budget;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import javax.annotation.Resource;
 
@@ -20,6 +21,7 @@ import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 
 import com.deltek.integration.ApplicationConfiguration;
+import com.deltek.integration.MaconomyAwareTest;
 import com.deltek.integration.MaconomyTrafficLiveBudgetIntegrationApplication;
 import com.deltek.integration.budget.JobBudgetMergeActionBuilder.BudgetLineAction;
 import com.deltek.integration.maconomy.client.APIContainerHelper;
@@ -39,15 +41,13 @@ import com.deltek.integration.maconomy.psorestclient.domain.JobBudget;
 import com.deltek.integration.maconomy.psorestclient.domain.JobBudgetLine;
 import com.deltek.integration.maconomy.psorestclient.domain.Journal;
 
-@RunWith(SpringJUnit4ClassRunner.class)
-@SpringBootTest(classes=MaconomyTrafficLiveBudgetIntegrationApplication.class)
-public class BudgetTest {
+public class BudgetTest extends MaconomyAwareTest {
 
 	private final Log log = LogFactory.getLog(getClass());
 	
 	private MaconomyPSORestContext restClientContext;
-	
 	private String testJobNumber;
+	private String budgetType;
 	
 	@Resource
 	private JobToBudgetService jobToBudgetService;
@@ -55,20 +55,20 @@ public class BudgetTest {
 	@Rule
 	public ExpectedException expectedEx = ExpectedException.none();
 
-	private String budgetType;
+	public BudgetTest(Map<String, String> serverCfg) {
+		super(serverCfg);
+	}
 
 	@Before
 	public void setup() {
-//		 MaconomyRestClient mrc222 = new MaconomyRestClient("Administrator", "123456", 
-//					"http://193.17.206.162:4111/containers/v1/x1demo");
-//		 testJobNumber = "1020123"; 
-//		 budgetType = "baseline";
 		
-		 MaconomyRestClient mrc233 = new MaconomyRestClient("Administrator", "123456", 
-				 					"http://193.17.206.161:4111/containers/v1/xdemo1");
-		 testJobNumber = "10250003";
-		 budgetType = "Reference";
-		 restClientContext = new MaconomyPSORestContext(mrc233);
+		MaconomyRestClient mrc = new MaconomyRestClient(
+				 serverCfg.get("user"), 
+				 serverCfg.get("pass"), 
+				serverCfg.get("macRestURL"));
+		testJobNumber = serverCfg.get("testJobNumber");
+		budgetType = serverCfg.get("budgetType");
+		restClientContext = new MaconomyPSORestContext(mrc);
 	}
 	
 	@Test

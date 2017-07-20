@@ -1,8 +1,6 @@
 package com.deltek.integration.budget;
 
 import java.util.Map;
-import java.util.Random;
-import java.util.concurrent.ExecutorService;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -25,6 +23,7 @@ import com.sohnar.trafficlite.transfer.dbenums.TimeZoneTO;
 import com.sohnar.trafficlite.transfer.financial.ChargeBandTO;
 import com.sohnar.trafficlite.transfer.project.JobTO;
 import com.sohnar.trafficlite.transfer.trafficcompany.TrafficCompanySettingsTO;
+import com.sohnar.trafficlite.transfer.trafficcompany.TrafficEmployeeTO;
 import com.sohnar.trafficlite.transfer.trafficcompany.integration.ErpIntegrationSettingsTO;
 import com.sohnar.utils.TrafficStringEncryptionUtil;
 
@@ -79,7 +78,7 @@ public class AsyncTaskRequestHandler {
 							settings.getTrafficLiveServiceUrl());
 		
 		JobTO jobTO = tlc.job().getById(job.getId());
-		jobTO = jobToBudgetService.mergeJobToMaconomyBudget(jobTO, createIntegrationDetailsHolder(tlc, settings));
+		jobTO = jobToBudgetService.mergeJobToMaconomyBudget(jobTO, createIntegrationDetailsHolder(tlc, asyncRequestMessage));
 		JobTO updatedJob = tlc.job().update(jobTO);
 
 		//All good, broadcast a completion message back to the client.
@@ -95,13 +94,15 @@ public class AsyncTaskRequestHandler {
 	}
 	
 	private IntegrationDetailsHolder createIntegrationDetailsHolder(TrafficLiveRestClient tlc,
-			ErpIntegrationSettingsTO settings) {
+			AsyncTaskMessage<ErpIntegrationSettingsTO, JobTO> asyncRequestMessage) {
+		ErpIntegrationSettingsTO settings = asyncRequestMessage.getData();
 		Map<Identifier, ChargeBandTO> chargeBands = tlc.chargeBands().getAll().stream().collect(
 				Collectors.toMap(k -> new Identifier(k.getId()), Function.identity()));
 		TrafficCompanySettingsTO companySettings =
 				tlc.get("/staff/companysettings", TrafficCompanySettingsTO.class);
 		Identifier tzId = companySettings.getTimeZoneId();
 		TimeZoneTO companyTimezone = tlc.getById("/application/timezone", tzId.getId(), TimeZoneTO.class);
+		TrafficEmployeeTO requestEmployee = tlc.employee().getById(asyncRequestMessage.getEmployeeMessage().getTrafficEmployeeId());
 		IntegrationDetailsHolder integrationDetails = 
 				new IntegrationDetailsHolder(chargeBands, 
 						settings.getMaconomyRESTServiceURLBase(), 
@@ -109,7 +110,8 @@ public class AsyncTaskRequestHandler {
 						TrafficStringEncryptionUtil.decrypt(settings.getMaconomyServicePassword()), 
 						settings.getMaconomyBudgetType(), 
 						settings.getMaconomyBudgetUuidProperty(), 
-						companyTimezone.getStringId());
+						companyTimezone.getStringId(),
+						requestEmployee);
 		return integrationDetails;
 	}
 

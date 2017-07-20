@@ -14,6 +14,7 @@ import org.apache.commons.logging.LogFactory;
 
 import com.deltek.integration.budget.JobBudgetMergeActionBuilder.BudgetLineAction;
 import com.deltek.integration.maconomy.client.MaconomyRestClient;
+import com.deltek.integration.maconomy.client.MaconomyRestClientException;
 import com.deltek.integration.maconomy.domain.CardTableContainer;
 import com.deltek.integration.maconomy.domain.Record;
 import com.deltek.integration.maconomy.psorestclient.MaconomyPSORestContext;
@@ -63,7 +64,7 @@ public class JobToBudgetService {
         budgetData = buildAndExecuteMergeActions(budgetData, trafficJob, integrationSettings, mrc);
         budgetData.card().getData()
                 .setRevisionremark1var(String.format("Synced at %s (UTC) from TrafficLIVE  by %s", 
-                		DATE_TIME_FORMAT.format(Calendar.getInstance().getTime()), getCurrentUserName()));
+                		DATE_TIME_FORMAT.format(Calendar.getInstance().getTime()), integrationSettings.getRequestEmployee().getUserName()));
         budgetData = mrc.jobBudget().update(budgetData.card());
         budgetData = mrc.jobBudget().postToAction("action:submitbudget", budgetData.card());
         budgetData = mrc.jobBudget().postToAction("action:approvebudget", budgetData.card());
@@ -124,25 +125,31 @@ public class JobToBudgetService {
 				LOG.debug("Executing Action: "+action);
 			}
 			
-			switch(action.getAction()) {
-				case DELETE:
-					//A DELETE action requires up to date concurrency data, likely from the previous action response 
-					lastBudget.ifPresent(i-> updateTableRecordMeta(action.getJobBudgetLine(), i));
-					lastBudget =  Optional.of(mrc.jobBudget().deleteTableRecord(action.getJobBudgetLine()));
-					break;
-				case CREATE:
-					//a CREATE action required concurrency control of the Card pane.
-					lastBudget.ifPresent(i-> action.getJobBudgetLine().setMeta(i.card().getMeta()));
-					lastBudget =  Optional.of(mrc.jobBudget().create(action.getJobBudgetLine()));
-					//CREATE actions also replace the instancekey with something server generated.
-					replaceInstanceKeys(lineActions, action, lastBudget.get().lastRecord());
-					break;
-				case UPDATE:
-					lastBudget.ifPresent(i -> updateTableRecordMeta(action.getJobBudgetLine(), i));
-					lastBudget = Optional.of(mrc.jobBudget().update(action.getJobBudgetLine()));
-					break;
-				default:
-					break;
+			try {
+					switch(action.getAction()) {
+					case DELETE:
+						//A DELETE action requires up to date concurrency data, likely from the previous action response 
+						lastBudget.ifPresent(i-> updateTableRecordMeta(action.getJobBudgetLine(), i));
+						lastBudget =  Optional.of(mrc.jobBudget().deleteTableRecord(action.getJobBudgetLine()));
+						break;
+					case CREATE:
+						//a CREATE action required concurrency control of the Card pane.
+						lastBudget.ifPresent(i-> action.getJobBudgetLine().setMeta(i.card().getMeta()));
+						lastBudget =  Optional.of(mrc.jobBudget().create(action.getJobBudgetLine()));
+						//CREATE actions also replace the instancekey with something server generated.
+						replaceInstanceKeys(lineActions, action, lastBudget.get().lastRecord());
+						break;
+					case UPDATE:
+						lastBudget.ifPresent(i -> updateTableRecordMeta(action.getJobBudgetLine(), i));
+						lastBudget = Optional.of(mrc.jobBudget().update(action.getJobBudgetLine()));
+						break;
+					default:
+						break;
+					}
+			} catch (MaconomyRestClientException mre) {
+				throw new BudgetIntegrationException("Error Processing Line Action:\n"+action.errorString() +
+													 "\n"+mre.getError().getErrorMessage(), 
+													 mre);
 			}
 		}
 		return lastBudget.get();
@@ -219,9 +226,4 @@ public class JobToBudgetService {
         return budgetData;
     }
 
-    //TODO - Do we need the current user?  It will be the integration user in this scenario.
-    private String getCurrentUserName() {
-    	return "";
-    }
-    
 }

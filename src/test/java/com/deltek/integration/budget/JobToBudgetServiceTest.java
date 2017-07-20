@@ -25,9 +25,9 @@ import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 import org.testng.Assert;
 
 import com.deltek.integration.ApplicationConfiguration;
+import com.deltek.integration.MaconomyAwareTest;
 import com.deltek.integration.budget.JobBudgetMergeActionBuilder.Action;
 import com.deltek.integration.budget.JobBudgetMergeActionBuilder.BudgetLineAction;
-import com.deltek.integration.data.Job;
 import com.deltek.integration.maconomy.client.MaconomyRestClient;
 import com.deltek.integration.maconomy.domain.CardTableContainer;
 import com.deltek.integration.maconomy.domain.Record;
@@ -42,10 +42,13 @@ import com.sohnar.trafficlite.transfer.financial.PrecisionMoneyTO;
 import com.sohnar.trafficlite.transfer.project.JobStageTO;
 import com.sohnar.trafficlite.transfer.project.JobTO;
 import com.sohnar.trafficlite.transfer.project.JobTaskTO;
+import com.sohnar.trafficlite.transfer.trafficcompany.TrafficEmployeeTO;
 
-@RunWith(SpringJUnit4ClassRunner.class)
-@ContextConfiguration(classes=ApplicationConfiguration.class)
-public class JobToBudgetServiceTest {
+public class JobToBudgetServiceTest extends MaconomyAwareTest {
+
+	public JobToBudgetServiceTest(Map<String, String> serverCfg) {
+		super(serverCfg);
+	}
 
 	private final Log log = LogFactory.getLog(getClass());
 	
@@ -60,32 +63,42 @@ public class JobToBudgetServiceTest {
 
 	private String testJobNumber;
 
-	
 	@Before
 	public void setup() {
-		 String macRestURL = "http://193.17.206.161:4111/containers/v1/xdemo1";
-		 String user = "Administrator";
-		 String pass = "123456";
-		 MaconomyRestClient mrc = new MaconomyRestClient(user, pass, 
-				 									macRestURL);
-		 restClientContext = new MaconomyPSORestContext(mrc);
 		 
 		 Map<Identifier, ChargeBandTO> chargeBandMap = new HashMap<>();
 
 		 //Integration needs valid chargebands with external codes.
 		 ChargeBandTO chargeBand = new ChargeBandTO();
-		 chargeBand.setExternalCode("Travel, Time");
+		 chargeBand.setExternalCode(serverCfg.get("chargeBandExternalCode"));
 		 //Blank Chargeband
 		 chargeBand.setSecondaryExternalCode("");
 		 chargeBandMap.put(new Identifier(1), chargeBand);
-		 integrationDetails = new IntegrationDetailsHolder(chargeBandMap , 
-				 macRestURL, 
-				 	user, pass, "Reference", "remark10", "UTC");
-		 testJobNumber = "10250003";
+		 integrationDetails = new IntegrationDetailsHolder(
+				 chargeBandMap, 
+				 serverCfg.get("macRestURL"), 
+				 serverCfg.get("user"), 
+				 serverCfg.get("pass"), 
+				 serverCfg.get("budgetType"), 
+				 	"remark10", 
+				 	"UTC", 
+				 	createTestTrafficEmployee());
+		 
+		 MaconomyRestClient mrc = new MaconomyRestClient(integrationDetails.getMacaonomyUser(), 
+				 integrationDetails.getMacaonomyPassword(), 
+				 integrationDetails.getMacaonomyRestServiceURLBase());
+		 restClientContext = new MaconomyPSORestContext(mrc);
+
+		 testJobNumber = serverCfg.get("testJobNumber");
 
 	}
-	
-	@Ignore //422 - You cannot enter a billing price for non-invoicable entities.
+
+	private TrafficEmployeeTO createTestTrafficEmployee() {
+		TrafficEmployeeTO employee = new TrafficEmployeeTO();
+		employee.setUserName("simonstewart@deltek.com");
+		return employee ;
+	}
+
 	@Test
 	public void verifyBudgetLineActions() {
 		CardTableContainer<JobBudget, JobBudgetLine> emptyBudget = clearBudget(testJobNumber);
@@ -221,12 +234,19 @@ public class JobToBudgetServiceTest {
 		
 	}
 	
-	@Ignore //422 - You cannot enter a billing pricce for non-invoiceable activites
+	@Test
+	public void mergeJobToMaconomyBudget() {
+		JobTO trafficLiveJob = createJob();
+		trafficLiveJob.setExternalCode(testJobNumber);
+		JobTO jobRevisionOne = jobToBudgetService.mergeJobToMaconomyBudget(trafficLiveJob, integrationDetails);
+	}
+	
 	@Test
 	public void mergeJob() {
 		//Create a new 2 Task 1 Stage Job.
 		CardTableContainer<JobBudget, JobBudgetLine> budgetData = clearBudget(testJobNumber);
 		JobTO job = createJob();
+		
 		CardTableContainer<JobBudget, JobBudgetLine> createdBudget = 
 				jobToBudgetService.buildAndExecuteMergeActions(budgetData, job , integrationDetails, restClientContext);
 		
@@ -253,6 +273,14 @@ public class JobToBudgetServiceTest {
 				jobToBudgetService.buildAndExecuteMergeActions(movedTaskBudget, job, integrationDetails, restClientContext);
 		
 		
+	}
+	
+	@Test
+	public void initTable() {
+		CardTableContainer<JobBudget, JobBudgetLine> budgetData = clearBudget(testJobNumber);
+        
+        List<BudgetLineAction> lineActions = new ArrayList<>();
+        Record<JobBudgetLine> budgetLine = restClientContext.jobBudget().initTable(budgetData.getPanes().getTable());
 	}
 	
 	@Test
@@ -296,7 +324,16 @@ public class JobToBudgetServiceTest {
         
         budgetData.card().getData().setShowbudgettypevar(integrationDetails.getMaconomyBudgetType());
         budgetData = restClientContext.jobBudget().update(budgetData.card());
-        budgetData = restClientContext.jobBudget().postToAction("action:removebudget", budgetData.card());
+        
+        //The Maconomy Business Rules Say the Budget needs to be reopened before the removebudget action is available.
+        //Note that the Budget Needs to be removed or there are no actions present on the Table node, which the line init is 
+        //dependent on.
+        if(budgetData.card().hasAction("action:reopenbudget")) {
+            budgetData = restClientContext.jobBudget().postToAction("action:reopenbudget", budgetData.card());
+        }
+        if(budgetData.card().hasAction("action:removebudget")) {
+            budgetData = restClientContext.jobBudget().postToAction("action:removebudget", budgetData.card());
+        }
         return budgetData;
 	}
 

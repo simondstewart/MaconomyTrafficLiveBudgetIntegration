@@ -111,7 +111,7 @@ public class JobBudgetMergeActionBuilder {
 				if(!tlUUIDsInBudget.contains(c.getUuid())) {
 					Record<JobBudgetLine> newLine = copyLine(templateLine, true);
 					lookupMapper(c.getClass(), mapperLookup).convertTo(c, newLine.getData());
-					lineActions.add(BudgetLineAction.create(newLine));
+					lineActions.add(BudgetLineAction.create(c, newLine));
 				}
 					
 			});
@@ -133,7 +133,7 @@ public class JobBudgetMergeActionBuilder {
 				Record<JobBudgetLine> previous = copyLine(budgetEntry.getValue(), false);
 				lookupMapper(line.getClass(), mapperLookup).convertTo(line, budgetEntry.getValue().getData());
 				if(!previous.getData().equals(budgetEntry.getValue().getData())) {
-					lineActions.add(BudgetLineAction.update(budgetLine));
+					lineActions.add(BudgetLineAction.update(line, budgetLine));
 				}
 			}
 
@@ -186,15 +186,23 @@ public class JobBudgetMergeActionBuilder {
     	private Action action;
     	private Record<JobBudgetLine> jobBudgetLine;
     	private Optional<Record<JobBudgetLine>> parentJobBudgetLine;
+    	private Optional<HasUuid> tlLine;
     	
     	public BudgetLineAction(Action action, Record<JobBudgetLine> jobBudgetLine) {
 			super();
 			this.action = action;
 			this.jobBudgetLine = jobBudgetLine;
 			this.parentJobBudgetLine = Optional.empty();
+			this.tlLine = Optional.empty();
 		}
     	
-    	public static BudgetLineAction delete(Record<JobBudgetLine> value) {
+    	public BudgetLineAction(Action action, Record<JobBudgetLine> jobBudgetLine,
+				Optional<HasUuid> tlLine) {
+			this(action, jobBudgetLine);
+			this.tlLine = tlLine;
+		}
+
+		public static BudgetLineAction delete(Record<JobBudgetLine> value) {
 			return new BudgetLineAction(Action.DELETE, value);
 		}
 		public static BudgetLineAction update(Record<JobBudgetLine> value) {
@@ -202,6 +210,12 @@ public class JobBudgetMergeActionBuilder {
 		}
 		public static BudgetLineAction create(Record<JobBudgetLine> value) {
 			return new BudgetLineAction(Action.CREATE, value);
+		}
+		public static BudgetLineAction update(HasUuid tlLine, Record<JobBudgetLine> value) {
+			return new BudgetLineAction(Action.UPDATE, value, Optional.of(tlLine));
+		}
+		public static BudgetLineAction create(HasUuid tlLine, Record<JobBudgetLine> value) {
+			return new BudgetLineAction(Action.CREATE, value, Optional.of(tlLine));
 		}
 
 		public Action getAction() {
@@ -227,6 +241,26 @@ public class JobBudgetMergeActionBuilder {
 		public String toString() {
 			return "BudgetLineAction [action=" + action + ", jobBudgetLine=" + jobBudgetLine.getData().getInstancekey() +"]";
 		}
+
+		public String errorString() {
+			StringBuilder errorString = new StringBuilder("Action: "+action);
+			errorString.append("\n Maconomy JobBudgetLine: text: "+jobBudgetLine.getData().getText());
+			tlLine.ifPresent(tlLine -> errorString.append("\n TrafficLIVE Line: "+tlLineToString(tlLine)));
+			return errorString.toString();
+		}
+		
+		private String tlLineToString(HasUuid tlLine) {
+			StringBuilder sb = new StringBuilder(tlLine.getClass().getSimpleName());
+			if(tlLine instanceof JobStageTO) {
+				sb.append(", description: ").append(((JobStageTO)tlLine).getDescription());
+			} else if (tlLine instanceof AbstractLineItemTO) {
+				sb.append(", description: ").append(((AbstractLineItemTO)tlLine).getDescription());
+			} else {
+				sb.append(", uuid: ").append(tlLine.getUuid());
+			}
+			return sb.toString();
+		}
+		
 		
     }
 
