@@ -16,6 +16,8 @@ import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.rules.SpringClassRule;
 import org.springframework.test.context.junit4.rules.SpringMethodRule;
 
+import com.sohnar.trafficlite.transfer.trafficcompany.TrafficEmployeeTO;
+
 @RunWith(value = Parameterized.class)
 @SpringBootTest(classes=MaconomyTrafficLiveBudgetIntegrationApplication.class)
 public class MaconomyAwareTest {
@@ -63,6 +65,12 @@ public class MaconomyAwareTest {
 		cfg.put("chargeBandExternalCode", "IoA, Fixed Price");
 		cfg.put("testJobNumber", "10250003");
 		return cfg ;
+	}
+	
+	protected TrafficEmployeeTO createTestTrafficEmployee() {
+		TrafficEmployeeTO employee = new TrafficEmployeeTO();
+		employee.setUserName("simonstewart@deltek.com");
+		return employee ;
 	}
 	
 	@Test

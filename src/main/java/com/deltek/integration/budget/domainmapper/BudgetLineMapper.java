@@ -8,27 +8,36 @@ import com.deltek.integration.budget.IntegrationDetailsHolder;
 import com.deltek.integration.maconomy.psorestclient.domain.JobBudgetLine;
 import com.sohnar.trafficlite.transfer.HasUuid;
 import com.sohnar.trafficlite.transfer.project.AbstractLineItemTO;
+import com.sohnar.trafficlite.transfer.project.JobStageTO;
 
-public abstract class BudgetLineMapper<A extends HasUuid> extends DozerConverter<A, JobBudgetLine> {
+public abstract class BudgetLineMapper<A extends HasUuid> {
 
 	private IntegrationDetailsHolder integrationDetailsHolder;
 
+	public enum Context  {
+		CREATE,
+		UPDATE;
+	}
+	
+	private final Class<A> prototypeA;
+	
 	public BudgetLineMapper(Class<A> prototypeA) {
-		super(prototypeA, JobBudgetLine.class);
+		this.prototypeA = prototypeA;
 	}
 
 	public BudgetLineMapper(Class<A> prototypeA, IntegrationDetailsHolder integrationDetailsHolder) {
-		super(prototypeA, JobBudgetLine.class);
+		this(prototypeA);
 		this.integrationDetailsHolder = integrationDetailsHolder;
 	}
 	
-	public IntegrationDetailsHolder getIntegrationDetailsHolder() {
-		return integrationDetailsHolder;
-	}
-
-	@Override
+	public abstract JobBudgetLine convertTo(A source, JobBudgetLine destination);
+	
 	public A convertFrom(JobBudgetLine source, A destination) {
 		throw new RuntimeException("Not Implemented Yet");
+	}
+
+	public IntegrationDetailsHolder getIntegrationDetailsHolder() {
+		return integrationDetailsHolder;
 	}
 
 	protected void mapAbstractLineItemPropertiesToMaconomyLine(AbstractLineItemTO trafficLine, JobBudgetLine maconomyLine) {

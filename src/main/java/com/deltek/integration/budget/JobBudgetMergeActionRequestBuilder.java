@@ -1,7 +1,6 @@
 package com.deltek.integration.budget;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -11,13 +10,7 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import com.deltek.integration.budget.JobBudgetMergeActionBuilder.BudgetLineAction;
-import com.deltek.integration.budget.domainmapper.AbstractLineBudgetLineMapper;
-import com.deltek.integration.budget.domainmapper.BudgetLineMapper;
-import com.deltek.integration.budget.domainmapper.JobStageBudgetLineMapper;
-import com.deltek.integration.budget.domainmapper.JobTaskBudgetLineMapper;
 import com.deltek.integration.maconomy.domain.CardTableContainer;
-import com.deltek.integration.maconomy.domain.CardTablePanes;
 import com.deltek.integration.maconomy.domain.Record;
 import com.deltek.integration.maconomy.psorestclient.domain.JobBudget;
 import com.deltek.integration.maconomy.psorestclient.domain.JobBudgetLine;
@@ -37,20 +30,17 @@ import com.sohnar.trafficlite.transfer.project.JobThirdPartyCostTO;
  * @author simonstewart
  *
  */
-public class JobBudgetMergeActionBuilder {
+public class JobBudgetMergeActionRequestBuilder {
 
+	private final IntegrationDetailsHolder integrationDetails;
 	private final ObjectMapper objectMapper;
 	private final Map<String, HasUuid> uuidJobLineItemMap;
 	private final Map<String, Record<JobBudgetLine>> instanceKeyJobBudgetLineMap;
 	private final Record<JobBudgetLine> templateLine;
-	private final Map<Class<?>, BudgetLineMapper<? extends HasUuid>> mapperLookup;
-	private final IntegrationDetailsHolder integrationDetails;
 	private final Map<String, JobStageTO> uuidStageMap;
 	private final Map<String, JobTaskTO> uuidTaskMap;
-	private List<? extends BudgetLineAction> creates;
-
 	
-	public JobBudgetMergeActionBuilder(JobTO job, CardTableContainer<JobBudget, JobBudgetLine> budgetData, ObjectMapper objectMapper,
+	public JobBudgetMergeActionRequestBuilder(JobTO job, CardTableContainer<JobBudget, JobBudgetLine> budgetData, ObjectMapper objectMapper,
 			Record<JobBudgetLine> templateLine, IntegrationDetailsHolder integrationDetals) {
 		this.objectMapper = objectMapper;
 		this.integrationDetails = integrationDetals;
@@ -63,7 +53,6 @@ public class JobBudgetMergeActionBuilder {
 		Map<String, JobThirdPartyCostTO> uuidThirdPartyMap = job.getJobThirdPartyCosts().stream().collect(
 																	Collectors.toMap(JobThirdPartyCostTO::getUuid, Function.identity()));
 		
-		mapperLookup = buildMapperLookup(integrationDetals);
 		//TODO find a clever way to merge this map with Java 8
 //		Map<String, HasUuid> uuidJobLineItemMap = new HashMap<>();
 		uuidJobLineItemMap = new HashMap<>();
@@ -80,8 +69,8 @@ public class JobBudgetMergeActionBuilder {
 
 	}
 	
-	public List<BudgetLineAction> deletes() {
-    	List<BudgetLineAction> lineActions = new ArrayList<>();
+	public List<BudgetLineActionRequest> deletes() {
+    	List<BudgetLineActionRequest> lineActions = new ArrayList<>();
 
     	//Iterate of the JobBudgetLines to derive records that need deletions and updates.
     	instanceKeyJobBudgetLineMap.entrySet().forEach(budgetEntry -> {
@@ -90,15 +79,15 @@ public class JobBudgetMergeActionBuilder {
     		
     		//The Budget Line DOES Not exist in TrafficLIVE, so it shall be removed.
     		if(!uuidJobLineItemMap.containsKey(budgetLineTLUUID)) {
-    			lineActions.add(BudgetLineAction.delete(budgetLine));
+    			lineActions.add(BudgetLineActionRequest.delete(budgetLine));
     		} 
     	});
-    	lineActions.sort(Comparator.comparing(i -> i.getJobBudgetLine().getData().getLinenumber()));
+    	lineActions.sort(Comparator.naturalOrder());
 		return lineActions;
 	}
 	
-	public List<? extends BudgetLineAction> creates() {
-		List<BudgetLineAction> lineActions = new ArrayList<>();
+	public List<? extends BudgetLineActionRequest> creates() {
+		List<BudgetLineActionRequest> lineActions = new ArrayList<>();
 
 		//All lines from Traffic that do not exist in Maconomy, need to be created.
 		List<String> tlUUIDsInBudget = instanceKeyJobBudgetLineMap.values().stream()
@@ -110,18 +99,22 @@ public class JobBudgetMergeActionBuilder {
 				//UUID does not exist in the JobBudgetLines.  This means it will be a create.
 				if(!tlUUIDsInBudget.contains(c.getUuid())) {
 					Record<JobBudgetLine> newLine = copyLine(templateLine, true);
-					lookupMapper(c.getClass(), mapperLookup).convertTo(c, newLine.getData());
-					lineActions.add(BudgetLineAction.create(c, newLine));
+					//do not perform full mapping, but we do need the tl uuid for later processing of creates.
+					newLine.getData().applyTrafficUUID(integrationDetails.getMaconomyBudgetUUIDProperty(), c.getUuid());
+
+					//TODO - Gargh!  Need the line number for new lines so the sort works.
+					//					lookupMapper(c.getClass(), mapperLookup).convertTo(c, newLine.getData());
+					lineActions.add(BudgetLineActionRequest.create(c, newLine));
 				}
 					
 			});
 		
-    	lineActions.sort(Comparator.comparing(i -> i.getJobBudgetLine().getData().getLinenumber()));
+    	lineActions.sort(Comparator.naturalOrder());
 		return lineActions;
 	}
 	
-	public List<? extends BudgetLineAction> updates() {
-		List<BudgetLineAction> lineActions = new ArrayList<>();
+	public List<? extends BudgetLineActionRequest> updates() {
+		List<BudgetLineActionRequest> lineActions = new ArrayList<>();
 		instanceKeyJobBudgetLineMap.entrySet().forEach(budgetEntry -> {
 			Record<JobBudgetLine> budgetLine = budgetEntry.getValue();
 			String budgetLineTLUUID = budgetLine.getData().lookupTrafficUUID(integrationDetails.getMaconomyBudgetUUIDProperty());
@@ -130,15 +123,23 @@ public class JobBudgetMergeActionBuilder {
 			// removed.
 			if (uuidJobLineItemMap.containsKey(budgetLineTLUUID)) {
 				HasUuid line = uuidJobLineItemMap.get(budgetLineTLUUID);
-				Record<JobBudgetLine> previous = copyLine(budgetEntry.getValue(), false);
-				lookupMapper(line.getClass(), mapperLookup).convertTo(line, budgetEntry.getValue().getData());
-				if(!previous.getData().equals(budgetEntry.getValue().getData())) {
-					lineActions.add(BudgetLineAction.update(line, budgetLine));
-				}
+//				Record<JobBudgetLine> previous = copyLine(budgetEntry.getValue(), false);
+//				lookupMapper(line.getClass(), mapperLookup).convertTo(line, budgetEntry.getValue().getData());
+//				//For an update, we will preserve the original line number field.  As consolidating the 
+//				//ordering from TrafficLIVE is a mess.
+//				budgetEntry.getValue().getData().setLinenumber(previous.getData().getLinenumber());
+//				
+//				if(!previous.getData().equals(budgetEntry.getValue().getData())) {
+//					lineActions.add(BudgetLineActionRequest.update(line, budgetLine));
+//				}
+				//The Update Request contains the state of the line prior to any proceeding updates.  This will be out of date 
+				//once proceeding actions have been processed.  See class ActionRequestProcessor
+				lineActions.add(BudgetLineActionRequest.update(line, budgetLine));
+				
 			}
 
 		});
-    	lineActions.sort(Comparator.comparing(i -> i.getJobBudgetLine().getData().getLinenumber()));
+    	lineActions.sort(Comparator.naturalOrder());
 		return lineActions;
 	}
 
@@ -148,23 +149,6 @@ public class JobBudgetMergeActionBuilder {
     	DELETE;
     }
 	
-	private BudgetLineMapper<HasUuid> lookupMapper(Class<?> lineClass,
-			Map<Class<?>, BudgetLineMapper<? extends HasUuid>> mapperLookup) {
-		BudgetLineMapper<HasUuid> mapper = (BudgetLineMapper<HasUuid>) mapperLookup.get(lineClass);
-		return mapper;
-
-	}
-
-	private Map<Class<?>, BudgetLineMapper<? extends HasUuid>> buildMapperLookup(IntegrationDetailsHolder integrationDetailsHolder) {
-		Map<Class<?>, BudgetLineMapper<? extends HasUuid>> mapperLookup = new HashMap<>();
-		mapperLookup.put(JobStageTO.class, new JobStageBudgetLineMapper(integrationDetailsHolder));
-		mapperLookup.put(JobTaskTO.class, new JobTaskBudgetLineMapper(integrationDetailsHolder));
-		mapperLookup.put(JobExpenseTO.class, new AbstractLineBudgetLineMapper(integrationDetailsHolder));
-		mapperLookup.put(JobThirdPartyCostTO.class, new AbstractLineBudgetLineMapper(integrationDetailsHolder));
-		return mapperLookup;
-		
-	}
-
 	private Record<JobBudgetLine> copyLine(Record<JobBudgetLine> templateLine, Boolean newUUID) {
     	//return a value copy
     	try {
@@ -181,14 +165,14 @@ public class JobBudgetMergeActionBuilder {
     	}
     }
     
-    public static class BudgetLineAction {
+    public static class BudgetLineActionRequest implements Comparable<BudgetLineActionRequest> {
     	
     	private Action action;
     	private Record<JobBudgetLine> jobBudgetLine;
     	private Optional<Record<JobBudgetLine>> parentJobBudgetLine;
     	private Optional<HasUuid> tlLine;
     	
-    	public BudgetLineAction(Action action, Record<JobBudgetLine> jobBudgetLine) {
+    	public BudgetLineActionRequest(Action action, Record<JobBudgetLine> jobBudgetLine) {
 			super();
 			this.action = action;
 			this.jobBudgetLine = jobBudgetLine;
@@ -196,26 +180,26 @@ public class JobBudgetMergeActionBuilder {
 			this.tlLine = Optional.empty();
 		}
     	
-    	public BudgetLineAction(Action action, Record<JobBudgetLine> jobBudgetLine,
+    	public BudgetLineActionRequest(Action action, Record<JobBudgetLine> jobBudgetLine,
 				Optional<HasUuid> tlLine) {
 			this(action, jobBudgetLine);
 			this.tlLine = tlLine;
 		}
 
-		public static BudgetLineAction delete(Record<JobBudgetLine> value) {
-			return new BudgetLineAction(Action.DELETE, value);
+		public static BudgetLineActionRequest delete(Record<JobBudgetLine> value) {
+			return new BudgetLineActionRequest(Action.DELETE, value);
 		}
-		public static BudgetLineAction update(Record<JobBudgetLine> value) {
-			return new BudgetLineAction(Action.UPDATE, value);
+		public static BudgetLineActionRequest update(Record<JobBudgetLine> value) {
+			return new BudgetLineActionRequest(Action.UPDATE, value);
 		}
-		public static BudgetLineAction create(Record<JobBudgetLine> value) {
-			return new BudgetLineAction(Action.CREATE, value);
+		public static BudgetLineActionRequest create(Record<JobBudgetLine> value) {
+			return new BudgetLineActionRequest(Action.CREATE, value);
 		}
-		public static BudgetLineAction update(HasUuid tlLine, Record<JobBudgetLine> value) {
-			return new BudgetLineAction(Action.UPDATE, value, Optional.of(tlLine));
+		public static BudgetLineActionRequest update(HasUuid tlLine, Record<JobBudgetLine> value) {
+			return new BudgetLineActionRequest(Action.UPDATE, value, Optional.of(tlLine));
 		}
-		public static BudgetLineAction create(HasUuid tlLine, Record<JobBudgetLine> value) {
-			return new BudgetLineAction(Action.CREATE, value, Optional.of(tlLine));
+		public static BudgetLineActionRequest create(HasUuid tlLine, Record<JobBudgetLine> value) {
+			return new BudgetLineActionRequest(Action.CREATE, value, Optional.of(tlLine));
 		}
 
 		public Action getAction() {
@@ -237,9 +221,14 @@ public class JobBudgetMergeActionBuilder {
 			return jobBudgetLine.getData().getInstancekey();
 		}
 		
+		public Optional<HasUuid> getTlLine() {
+			return tlLine;
+		}
+
 		@Override
 		public String toString() {
-			return "BudgetLineAction [action=" + action + ", jobBudgetLine=" + jobBudgetLine.getData().getInstancekey() +"]";
+			return "BudgetLineActionRequest [action=" + action + ", jobBudgetLine=" + jobBudgetLine + ", tlLine="
+					+ (tlLine.isPresent() ? tlLineToString(tlLine.get()) : "EMPTY" )  + "]";
 		}
 
 		public String errorString() {
@@ -250,6 +239,9 @@ public class JobBudgetMergeActionBuilder {
 		}
 		
 		private String tlLineToString(HasUuid tlLine) {
+			if(tlLine == null)
+				return "";
+			
 			StringBuilder sb = new StringBuilder(tlLine.getClass().getSimpleName());
 			if(tlLine instanceof JobStageTO) {
 				sb.append(", description: ").append(((JobStageTO)tlLine).getDescription());
@@ -258,9 +250,52 @@ public class JobBudgetMergeActionBuilder {
 			} else {
 				sb.append(", uuid: ").append(tlLine.getUuid());
 			}
+			sb.append(", lineOrder: ").append(lineOrder());
 			return sb.toString();
 		}
+
+		@Override
+		public int compareTo(BudgetLineActionRequest o) {
+			//DELETES at the start.
+			if(Action.DELETE.equals(action)) 
+					return -1;
+			
+			return Integer.compare(lineOrder(), o.lineOrder());
+		}
 		
+		public Integer lineOrder() {
+			if(!getTlLine().isPresent())
+				return 0;
+			HasUuid tlLine = getTlLine().get();
+			if(JobTaskTO.class.equals(tlLine.getClass())) {
+				return ((JobTaskTO)tlLine).getHierarchyOrder();
+			} else if (JobStageTO.class.equals(tlLine.getClass())) {
+				return ((JobStageTO)tlLine).getHierarchyOrder();
+			} else if (AbstractLineItemTO.class.isAssignableFrom(tlLine.getClass())) {
+				return ((AbstractLineItemTO)tlLine).getLineItemOrder();
+			} else {
+				throw new RuntimeException("Invalid Line Type encountered: "+tlLine.getClass());
+			}
+			
+ 		}
+		
+		public Optional<String> tlParentUUID() {
+			if(getTlLine().isPresent()) {
+				String parentUUID = "";
+				HasUuid tlLine = getTlLine().get();
+				if(tlLine instanceof JobStageTO) {
+					parentUUID = ((JobStageTO)tlLine).getParentStageUUID();
+					
+				} else if (tlLine instanceof JobTaskTO) {
+					parentUUID = ((JobTaskTO)tlLine).getJobStageUUID();
+				}
+
+				if(parentUUID != null && !parentUUID.trim().isEmpty())
+					return Optional.of(parentUUID);
+			}
+
+			return Optional.empty();
+	}
 		
     }
 

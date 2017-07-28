@@ -12,7 +12,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
-import com.deltek.integration.budget.JobBudgetMergeActionBuilder.BudgetLineAction;
+import com.deltek.integration.budget.JobBudgetMergeActionRequestBuilder.BudgetLineActionRequest;
 import com.deltek.integration.maconomy.client.MaconomyRestClient;
 import com.deltek.integration.maconomy.client.MaconomyRestClientException;
 import com.deltek.integration.maconomy.domain.CardTableContainer;
@@ -47,24 +47,24 @@ public class JobToBudgetService {
      * In addition, new lines created on the job non-existent in the Budget will be created.
      * 
      */
-	public JobTO mergeJobToMaconomyBudget(JobTO trafficJob, IntegrationDetailsHolder integrationSettings) {
+	public JobTO mergeJobToMaconomyBudget(JobTO trafficJob, IntegrationDetailsHolder integrationDetails) {
 		
-        MaconomyPSORestContext mrc = buildMaconomyContext(integrationSettings);
+        MaconomyPSORestContext mrc = buildMaconomyContext(integrationDetails);
         String maconomyJobNumber = trafficJob.getExternalCode();
         
         CardTableContainer<JobBudget, JobBudgetLine> budgetData = 
         		mrc.jobBudget().data(String.format("jobnumber=%s", maconomyJobNumber));
 
-        budgetData = updateBudgetType(budgetData, integrationSettings.getMaconomyBudgetType(), mrc);
+        budgetData = updateBudgetType(budgetData, integrationDetails.getMaconomyBudgetType(), mrc);
 
         if(budgetData.card().hasAction("action:reopenbudget")) {
         	budgetData = mrc.jobBudget().postToAction("action:reopenbudget", budgetData.card());
         }
         
-        budgetData = buildAndExecuteMergeActions(budgetData, trafficJob, integrationSettings, mrc);
+        budgetData = buildAndExecuteMergeActions(budgetData, trafficJob, integrationDetails, mrc);
         budgetData.card().getData()
                 .setRevisionremark1var(String.format("Synced at %s (UTC) from TrafficLIVE  by %s", 
-                		DATE_TIME_FORMAT.format(Calendar.getInstance().getTime()), integrationSettings.getRequestEmployee().getUserName()));
+                		DATE_TIME_FORMAT.format(Calendar.getInstance().getTime()), integrationDetails.getRequestEmployee().getUserName()));
         budgetData = mrc.jobBudget().update(budgetData.card());
         budgetData = mrc.jobBudget().postToAction("action:submitbudget", budgetData.card());
         budgetData = mrc.jobBudget().postToAction("action:approvebudget", budgetData.card());
@@ -77,7 +77,7 @@ public class JobToBudgetService {
 																			IntegrationDetailsHolder integrationDetails, 
 																			MaconomyPSORestContext mrc) {
 		
-		List<BudgetLineAction> lineActions = createMergeLineActions(budgetData, job, integrationDetails, mrc);
+		List<BudgetLineActionRequest> lineActions = createMergeLineActions(budgetData, job, integrationDetails, mrc);
 		
 		//Populate any Hierarchy relationships that exist.  It would be nice if the ActionBuilder could do this
 		//but the granularity of the Action prevents it.
@@ -88,20 +88,20 @@ public class JobToBudgetService {
 		if(lineActions.isEmpty()) 
 			return budgetData;
 		
-		budgetData = executeActions(mrc, lineActions);
-		return budgetData;
+		return executeActions(mrc, integrationDetails, budgetData, lineActions);
+
 	}
 
-	public List<BudgetLineAction> createMergeLineActions(CardTableContainer<JobBudget, JobBudgetLine> budgetData,
+	public List<BudgetLineActionRequest> createMergeLineActions(CardTableContainer<JobBudget, JobBudgetLine> budgetData,
 			JobTO job, IntegrationDetailsHolder integrationDetails, MaconomyPSORestContext mrc) {
 
 		Record<JobBudgetLine> templateLine = mrc.jobBudget().initTable(budgetData.getPanes().getTable());
 
 		// Generate a collection of lines actions, based on the state to be merged.
-		JobBudgetMergeActionBuilder actionBuilder = new JobBudgetMergeActionBuilder(job, budgetData, objectMapper,
+		JobBudgetMergeActionRequestBuilder actionBuilder = new JobBudgetMergeActionRequestBuilder(job, budgetData, objectMapper,
 				templateLine, integrationDetails);
 
-		List<BudgetLineAction> lineActions = actionBuilder.deletes();
+		List<BudgetLineActionRequest> lineActions = actionBuilder.deletes();
 		lineActions.addAll(actionBuilder.creates());
 		lineActions.addAll(actionBuilder.updates());
 
@@ -114,94 +114,28 @@ public class JobToBudgetService {
 	 * Then we execute all CREATES - so new lines will exist on maconomy.
 	 * Finally UDPATES, so new lines (if moved, can link to either existing or new lines)
 	 * Store the state of the container, as we need to refresh the concurrency control for every line.
+	 * @param integrationDetails 
+	 * @param budgetData 
 	 */
-	 public CardTableContainer<JobBudget, JobBudgetLine> executeActions(MaconomyPSORestContext mrc, List<BudgetLineAction> lineActions) {
-		CardTableContainer<JobBudget, JobBudgetLine> workingBudget = null;
-		Optional<CardTableContainer<JobBudget, JobBudgetLine>> lastBudget = Optional.ofNullable(workingBudget);
+	 public CardTableContainer<JobBudget, JobBudgetLine> executeActions(MaconomyPSORestContext mrc, 
+			 																IntegrationDetailsHolder integrationDetails, 
+			 																CardTableContainer<JobBudget, JobBudgetLine> budgetData, 
+			 																List<BudgetLineActionRequest> lineActions) {
+		CardTableContainer<JobBudget, JobBudgetLine> updatedBudget = budgetData;
+		ActionRequestProcessor actionProcessor = new ActionRequestProcessor(integrationDetails, objectMapper);
 		
-		for(BudgetLineAction action : lineActions) {
+		for(BudgetLineActionRequest action : lineActions) {
 
-			if(LOG.isDebugEnabled()) {
-				LOG.debug("Executing Action: "+action);
-			}
+			updatedBudget = actionProcessor.executeAction(mrc, integrationDetails, action, updatedBudget, lineActions);
 			
-			try {
-					switch(action.getAction()) {
-					case DELETE:
-						//A DELETE action requires up to date concurrency data, likely from the previous action response 
-						lastBudget.ifPresent(i-> updateTableRecordMeta(action.getJobBudgetLine(), i));
-						lastBudget =  Optional.of(mrc.jobBudget().deleteTableRecord(action.getJobBudgetLine()));
-						break;
-					case CREATE:
-						//a CREATE action required concurrency control of the Card pane.
-						lastBudget.ifPresent(i-> action.getJobBudgetLine().setMeta(i.card().getMeta()));
-						lastBudget =  Optional.of(mrc.jobBudget().create(action.getJobBudgetLine()));
-						//CREATE actions also replace the instancekey with something server generated.
-						replaceInstanceKeys(lineActions, action, lastBudget.get().lastRecord());
-						break;
-					case UPDATE:
-						lastBudget.ifPresent(i -> updateTableRecordMeta(action.getJobBudgetLine(), i));
-						lastBudget = Optional.of(mrc.jobBudget().update(action.getJobBudgetLine()));
-						break;
-					default:
-						break;
-					}
-			} catch (MaconomyRestClientException mre) {
-				throw new BudgetIntegrationException("Error Processing Line Action:\n"+action.errorString() +
-													 "\n"+mre.getError().getErrorMessage(), 
-													 mre);
-			}
 		}
-		return lastBudget.get();
-	}
-
-	private void replaceInstanceKeys(List<BudgetLineAction> lineActions, BudgetLineAction executedAction,
-			Record<JobBudgetLine> recentlyCreatedRecord) {
-		//Find all usages of the pre-creation instance key in the action list and replace it with
-		//the server allocated instance key.
-		lineActions.stream()
-				.map(i -> i.getJobBudgetLine().getData())
-				.filter(i ->
-					{
-						return 	i.getParentjobbudgetlineinstancekey() != null &&
-								!i.getParentjobbudgetlineinstancekey().isEmpty() &&
-								i.getParentjobbudgetlineinstancekey()
-								.equals(executedAction.getJobBudgetLine().getData().getInstancekey());
-					})
-				.forEach(i -> 
-					{
-						i.setParentjobbudgetlineinstancekey(recentlyCreatedRecord.getData().getInstancekey());
-					});
-	}
-
- 
-    private void updateTableRecordMeta(Record<JobBudgetLine> jobBudgetLine,
-			CardTableContainer<JobBudget, JobBudgetLine> container) {
-    	//If we find a matching record, then update the meta of the line.
-    	Optional<Record<JobBudgetLine>> budgetLine = 
-    			container.tableRecords().stream().filter(i -> jobBudgetLine.getData().getInstancekey().equals(
-    																i.getData().getInstancekey())
-    					).findFirst();
-    	
-    	budgetLine.ifPresent(i -> {
-    		if(LOG.isDebugEnabled()) {
-    			try {
-					LOG.debug("Overriding meta: "+this.objectMapper.writeValueAsString(jobBudgetLine.getMeta() + 
-							"\nWith: "+this.objectMapper.writeValueAsString(i.getMeta())));
-				} catch (Exception e) {
-					throw new BudgetIntegrationException(e);
-				}
-    		}
-    		jobBudgetLine.setMeta(i.getMeta());	
-    		//We dont just need to override the meta, but the actions also - as the ordering may have changed entirely.
-    		jobBudgetLine.setLinks(i.getLinks());
-    	});
-    }
-
-    private MaconomyPSORestContext buildMaconomyContext(IntegrationDetailsHolder integrationSettings) {
-    	MaconomyRestClient client = new MaconomyRestClient(integrationSettings.getMacaonomyUser(), 
-    														integrationSettings.getMacaonomyPassword(),
-    														integrationSettings.getMacaonomyRestServiceURLBase());
+		return updatedBudget;
+	} 
+	 
+    private MaconomyPSORestContext buildMaconomyContext(IntegrationDetailsHolder integrationDetails) {
+    	MaconomyRestClient client = new MaconomyRestClient(integrationDetails.getMacaonomyUser(), 
+    														integrationDetails.getMacaonomyPassword(),
+    														integrationDetails.getMacaonomyRestServiceURLBase());
     	return new MaconomyPSORestContext(client);
     	
     }

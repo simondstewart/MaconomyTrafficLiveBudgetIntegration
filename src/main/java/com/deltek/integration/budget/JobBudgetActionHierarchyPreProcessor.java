@@ -6,7 +6,7 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import com.deltek.integration.budget.JobBudgetMergeActionBuilder.BudgetLineAction;
+import com.deltek.integration.budget.JobBudgetMergeActionRequestBuilder.BudgetLineActionRequest;
 import com.deltek.integration.maconomy.domain.CardTableContainer;
 import com.deltek.integration.maconomy.psorestclient.domain.JobBudget;
 import com.deltek.integration.maconomy.psorestclient.domain.JobBudgetLine;
@@ -28,14 +28,14 @@ import com.sohnar.trafficlite.transfer.project.JobTO;
  */
 public class JobBudgetActionHierarchyPreProcessor {
 
-	private final List<BudgetLineAction> lineActions;
+	private final List<BudgetLineActionRequest> lineActions;
 	private final JobTO jobTO;
 	private final IntegrationDetailsHolder integrationDetails;
 	private final CardTableContainer<JobBudget, JobBudgetLine> budget;
 
 	public JobBudgetActionHierarchyPreProcessor(JobTO jobTO, 
 												CardTableContainer<JobBudget, JobBudgetLine> budgetData, 
-												List<BudgetLineAction> lineActions,
+												List<BudgetLineActionRequest> lineActions,
 												IntegrationDetailsHolder integrationDetails) {
 		this.jobTO = jobTO;
 		this.budget = budgetData;
@@ -43,7 +43,7 @@ public class JobBudgetActionHierarchyPreProcessor {
 		this.integrationDetails = integrationDetails;
 	}
 
-	public List<BudgetLineAction> process() {
+	public List<BudgetLineActionRequest> process() {
 		
 		//Start with all existing records with TL ids.
 		Map<String, JobBudgetLine> tlUuidToJobLine = budget.tableRecords().stream()

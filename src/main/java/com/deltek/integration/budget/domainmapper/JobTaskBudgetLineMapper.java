@@ -31,10 +31,6 @@ public class JobTaskBudgetLineMapper extends BudgetLineMapper<JobTaskTO> {
     private void mapTaskToMaconomyLine(JobTaskTO trafficTask, JobBudgetLine maconomyLine, IntegrationDetailsHolder integrationDetails) {
         mapAbstractLineItemPropertiesToMaconomyLine(trafficTask, maconomyLine);
         maconomyLine.setLinenumber(trafficTask.getHierarchyOrder());
-        //We are a bit cheeky here, mapping the TrafficLIVE Stage UUID to the Maconomy Line, in the 
-        //full knowledge that it will be replaced downstream by the maconomy server instance key for the stage.
-        maconomyLine.setParentjobbudgetlineinstancekey(trafficTask.getJobStageUUID());
-        
         //Only populate the taskname and employeecategorynumber if we have a non milestone, as this information
         //is retrieved from the chargeband relation.
         if(JobTaskCategoryType.MILESTONE.equals(trafficTask.getJobTaskCategory())) {
