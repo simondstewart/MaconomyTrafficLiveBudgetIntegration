@@ -75,8 +75,6 @@ public class ActionRequestProcessor {
 						mapParentUUID(integrationDetails, action, workingBudget);
 					}
 					updatedBudgetContainer =  mrc.jobBudget().create(action.getJobBudgetLine());
-//					//CREATE actions also replace the instancekey with something server generated.
-//					replaceInstanceKeys(lineActions, action, budgetToReturn.lastRecord());
 					break;
 				case UPDATE:
 					updateTableRecordWithPreviousResponse(action.getJobBudgetLine(), workingBudget);
@@ -120,6 +118,9 @@ public class ActionRequestProcessor {
 	//We need to retrieve the UUID of the tlLine item from the previously executed request.  This is because the line may
 	//have been created by the previous request and we would have no knowledge of its instance key.
 	private void mapParentUUID(IntegrationDetailsHolder integrationDetails, BudgetLineActionRequest action, CardTableContainer<JobBudget, JobBudgetLine> workingBudget) {
+		//start by clearing resetting the parentid, so we can find the new relationship (if it exists).
+		action.getJobBudgetLine().getData().setParentjobbudgetlineinstancekey("");
+		
 		action.tlParentUUID().ifPresent(parentUUID -> {
 			Optional<JobBudgetLine> parent = workingBudget.tableRecords().stream()
 					.map(i->i.getData())

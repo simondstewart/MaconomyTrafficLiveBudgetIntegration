@@ -436,6 +436,21 @@ public class JobToBudgetServiceTest extends MaconomyAwareTest {
 		JobBudgetLine newChild = 
 				movedTaskIntoNewStageBudget.tableRecords().stream().map(i -> i.getData()).filter(i -> i.getText().equals("THREE")).findAny().get();
 		Assert.assertEquals(newParent.getInstancekey(), newChild.getParentjobbudgetlineinstancekey());
+		
+		//Finally remove the task from the stage and ensure that it no longer has a parent.
+		LOG.info("Removing Existing Task from all Stages.");
+		String taskDescriptionToMove = "THREE";
+		
+		JobTaskTO toMove = job.getJobTasks().stream().filter(i->i.getDescription() == taskDescriptionToMove).findFirst().get();
+		toMove.setJobStageUUID("");
+
+		CardTableContainer<JobBudget, JobBudgetLine> taskOutOfStage = 
+				jobToBudgetService.buildAndExecuteMergeActions(movedTaskBudget, job, integrationDetails, restClientContext);
+		
+		//Assert success of move.
+		JobBudgetLine rootNodeTask = 
+				taskOutOfStage.tableRecords().stream().map(i -> i.getData()).filter(i -> i.getText().equals(taskDescriptionToMove)).findAny().get();
+		Assert.assertEquals(rootNodeTask.getParentjobbudgetlineinstancekey(), "");
 	}
 	
 	@Test
