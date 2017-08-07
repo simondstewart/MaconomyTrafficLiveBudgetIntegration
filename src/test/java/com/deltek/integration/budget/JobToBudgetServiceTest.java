@@ -316,20 +316,21 @@ public class JobToBudgetServiceTest extends MaconomyAwareTest {
 				}).collect(Collectors.toSet());
 		
 		testJob.setJobTasks(reOrderedTasks);
-		
 		JobTO mergedJob = jobToBudgetService.mergeJobToMaconomyBudget(testJob, integrationDetails);
-		
+
 		//Remove the subtask.
 		Boolean itemRemoved = mergedJob.getJobTasks().removeIf(task -> task.getDescription() == "ONE");
 		Assert.assertTrue(itemRemoved);
 		Assert.assertEquals(mergedJob.getJobTasks().size(), 1);
 		
 		//Also rename the stage to force an update.
-		JobStageTO stageToUpdate = 
-				mergedJob.getJobStages().parallelStream().filter(i -> i.getDescription() == "STAGE-ONE").findFirst().get();
-		stageToUpdate.setDescription(stageToUpdate.getDescription()+"-UPDATED");
+//		JobStageTO stageToUpdate = 
+//				mergedJob.getJobStages().parallelStream().filter(i -> i.getDescription() == "STAGE-ONE").findFirst().get();
+//		stageToUpdate.setDescription(stageToUpdate.getDescription()+"-UPDATED");
 		
 		JobTO removedLineFromSubstageJob = jobToBudgetService.mergeJobToMaconomyBudget(mergedJob, integrationDetails);
+		Optional<JobTaskTO> removedTask = removedLineFromSubstageJob.getJobTasks().stream().filter(task -> task.getDescription() == "ONE").findAny();
+		Assert.assertFalse(removedTask.isPresent());
 		
 	}
 
@@ -370,7 +371,7 @@ public class JobToBudgetServiceTest extends MaconomyAwareTest {
 	}
 	
 	@Test
-	public void mergeJobToMaconomyBudget() {
+	public void addMilestone() {
 		CardTableContainer<JobBudget, JobBudgetLine> budgetData = clearBudget(testJobNumber);
 		
 		JobTO trafficLiveJob = createJob(testJobNumber);

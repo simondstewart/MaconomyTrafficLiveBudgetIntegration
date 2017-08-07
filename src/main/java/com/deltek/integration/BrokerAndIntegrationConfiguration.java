@@ -8,7 +8,6 @@ import org.apache.activemq.ActiveMQConnectionFactory;
 import org.apache.activemq.command.ActiveMQQueue;
 import org.apache.activemq.command.ActiveMQTopic;
 import org.apache.activemq.pool.PooledConnectionFactory;
-import org.apache.catalina.servlet4preview.http.Mapping;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -17,16 +16,11 @@ import org.springframework.integration.annotation.MessagingGateway;
 import org.springframework.integration.config.EnableIntegration;
 import org.springframework.integration.dsl.IntegrationFlow;
 import org.springframework.integration.dsl.IntegrationFlows;
-import org.springframework.integration.dsl.core.MessageProcessorSpec;
 import org.springframework.integration.dsl.jms.Jms;
 import org.springframework.jms.core.JmsTemplate;
-import org.springframework.messaging.Message;
-import org.springframework.messaging.MessageChannel;
 import org.springframework.messaging.support.GenericMessage;
 
 import com.deltek.integration.budget.AsyncTaskRequestHandler;
-import com.sohnar.trafficlite.datamodel.enums.event.TrafficEmployeeEventType;
-import com.sohnar.trafficlite.integration.data.TrafficCompanyMessage;
 import com.sohnar.trafficlite.integration.data.TrafficEmployeeMessage;
 import com.sohnar.trafficlite.integration.data.async.AsyncTaskMessage;
 

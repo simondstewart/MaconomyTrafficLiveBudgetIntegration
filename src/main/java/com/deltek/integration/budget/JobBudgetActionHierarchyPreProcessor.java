@@ -3,6 +3,7 @@ package com.deltek.integration.budget;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -45,10 +46,14 @@ public class JobBudgetActionHierarchyPreProcessor {
 
 	public List<BudgetLineActionRequest> process() {
 		
+		Set<String> uuids = jobTO.getJobTasks().stream().map(i->i.getUuid()).collect(Collectors.toSet());
+		uuids.addAll(jobTO.getJobStages().stream().map(i->i.getUuid()).collect(Collectors.toSet()));
+		
 		//Start with all existing records with TL ids.
 		Map<String, JobBudgetLine> tlUuidToJobLine = budget.tableRecords().stream()
 				.map(record -> record.getData())
 				.filter(i -> !i.lookupTrafficUUID(integrationDetails.getMaconomyBudgetUUIDProperty()).isEmpty())
+				.filter(i -> uuids.contains(i.lookupTrafficUUID(integrationDetails.getMaconomyBudgetUUIDProperty())))
 				.collect(Collectors.toMap(p -> p.lookupTrafficUUID(integrationDetails.getMaconomyBudgetUUIDProperty()), 
 						  Function.identity()));
 

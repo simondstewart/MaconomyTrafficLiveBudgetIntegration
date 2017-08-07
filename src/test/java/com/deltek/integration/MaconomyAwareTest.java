@@ -63,7 +63,7 @@ public class MaconomyAwareTest {
 		cfg.put("pass", "123456");
 		cfg.put("budgetType", "Reference");
 		cfg.put("chargeBandExternalCode", "IoA, Fixed Price");
-		cfg.put("testJobNumber", "10250003");
+		cfg.put("testJobNumber", "10250001");
 		return cfg ;
 	}
 	
