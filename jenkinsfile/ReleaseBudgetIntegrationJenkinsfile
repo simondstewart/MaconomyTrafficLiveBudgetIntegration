@@ -20,20 +20,22 @@ node {
         stage('Release Libraries') {
             configFileProvider([configFile(fileId: '22763e5b-1cfd-4e6a-9d87-120d3ea7df83', variable: 'MAVEN_SETTINGS')]) {
                 withMaven(maven: 'M3',) {
-                    sh "mvn -B -f  ./pom.xml -s '$MAVEN_SETTINGS' -DdevelopmentVersion=${DEVELOPMENT_VERSION}-SNAPSHOT -DreleaseVersion=${RELEASE_VERSION} -DdryRun=${DRY_RUN} -DskipTests release:prepare clean release:perform -Dresume=false"
+                    sh "mvn -B -f  ./pom.xml -s '$MAVEN_SETTINGS' -DdevelopmentVersion=${DEVELOPMENT_VERSION}-SNAPSHOT -DreleaseVersion=${RELEASE_VERSION} -DdryRun=${DRY_RUN} -Darguments="-DskipTests" release:prepare clean release:perform -Dresume=false"
                 }
             }
         }
 
-        /* stage('Build & Push Docker image') {
+        stage('Build & Push Docker image') {
             if( ${DRY_RUN} == false ) {
                 docker.withRegistry('https://registry.hub.docker.com', dockerCredentialsId) {
                     imageToBuild = imageToBuild.replaceAll("\\s", "-")
                     def app = docker.build(imageToBuild)
-                    app.push()
+                    if( "${DRY_RUN}" == "false" ) {
+                        app.push()
+                    }
                 }
             }
-        } */
+        }
 
     } catch (e) {
         // If there was an exception thrown, the build failed
