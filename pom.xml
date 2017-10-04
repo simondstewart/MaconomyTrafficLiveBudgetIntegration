@@ -86,7 +86,7 @@
 		<dependency>
 			<groupId>com.deltek.integration.maconomy</groupId>
 			<artifactId>MaconomyRestClient</artifactId>
-			<version>1.0.1-SNAPSHOT</version>
+			<version>1.0.1</version>
 		</dependency>
 		<dependency>
 			<groupId>org.apache.commons</groupId>
