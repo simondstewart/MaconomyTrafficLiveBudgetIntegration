@@ -28,6 +28,9 @@ node {
 
         stage('Build & Push Docker image') {
             if( "${DRY_RUN}" == "false" ) {
+                withMaven(maven: 'M3',) {
+                    sh "mvn -DskipTests clean install -Darguments='-DskipTests'"
+                }
                 docker.withRegistry('https://registry.hub.docker.com', dockerCredentialsId) {
                     imageToBuild = imageToBuild.replaceAll("\\s", "-")
                     def app = docker.build(imageToBuild)
