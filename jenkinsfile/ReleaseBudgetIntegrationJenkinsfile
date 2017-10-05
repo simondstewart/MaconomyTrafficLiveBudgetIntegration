@@ -1,0 +1,50 @@
+#!/usr/bin/env groovy
+
+node {
+
+    def err = null
+    def dockerCredentialsId = "c26597e1-1def-4d7a-a2eb-f34c35514021"
+    currentBuild.result = "SUCCESS"
+    def imageToBuild = "andreadeltek/maconomytrafficlivebudgetintegration:RELEASE-${RELEASE_VERSION}"
+
+    try {
+
+        stage('Initialise') {
+            step([$class: 'WsCleanup'])
+        }
+
+        stage('git Clone') {
+            echo "Checking out ${BRANCH_NAME}"
+            git credentialsId: '612eac41-8423-4fd0-be3b-ba9465d0e1a4', url: 'git@github.com:simondstewart/MaconomyTrafficLiveBudgetIntegration.git', branch: BRANCH_NAME
+        }
+
+        stage('Release Libraries') {
+            configFileProvider([configFile(fileId: '22763e5b-1cfd-4e6a-9d87-120d3ea7df83', variable: 'MAVEN_SETTINGS')]) {
+                withMaven(maven: 'M3',) {
+                    sh "mvn -B -f  ./pom.xml -s '$MAVEN_SETTINGS' -DdevelopmentVersion=${DEVELOPMENT_VERSION}-SNAPSHOT -DreleaseVersion=${RELEASE_VERSION} -DdryRun=${DRY_RUN} -DskipTests release:prepare clean release:perform -Darguments='-DskipTests' -Dresume=false"
+                }
+            }
+        }
+
+        stage('Build & Push Docker image') {
+            if( "${DRY_RUN}" == "false" ) {
+                docker.withRegistry('https://registry.hub.docker.com', dockerCredentialsId) {
+                    imageToBuild = imageToBuild.replaceAll("\\s", "-")
+                    def app = docker.build(imageToBuild)
+                    app.push()
+                }
+            }
+        }
+
+    } catch (e) {
+        // If there was an exception thrown, the build failed
+        err = e
+        currentBuild.result = "FAILED"
+    } finally {
+        // Success or failure, always send notifications
+        slackNotification(currentBuild.result, currentBuild.duration)
+        if (err) {
+            throw err
+        }
+    }
+}
