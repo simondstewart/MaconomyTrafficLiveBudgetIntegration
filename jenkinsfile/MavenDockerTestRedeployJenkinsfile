@@ -1,0 +1,71 @@
+#!/usr/bin/env groovy
+
+node {
+    def err = null
+    currentBuild.result = "SUCCESS"
+    def dockerCredentialsId = "c26597e1-1def-4d7a-a2eb-f34c35514021"
+    def imageToBuild = "andreadeltek/maconomytrafficlivebudgetintegration:${BUILD_TAG}-${BRANCH}"
+    def emailTo = "${env.EMAIL_TO}"
+    det ServerIP = "10.4.164.24"
+
+    try{
+
+        stage('Initialise') {
+                step([$class: 'WsCleanup'])
+            }
+
+        stage('Clone repository') {
+            echo "Checking out ${BRANCH}"
+            git credentialsId: '612eac41-8423-4fd0-be3b-ba9465d0e1a4', url: 'git@github.com:simondstewart/MaconomyTrafficLiveBudgetIntegration.git', branch: BRANCH_NAME
+        }
+
+        stage('Maven') {
+            withMaven(maven: 'M3',) {
+                sh "mvn -DskipTests clean install"
+            }
+        }
+
+        stage('Build & Push image') {
+            docker.withRegistry('https://registry.hub.docker.com', dockerCredentialsId) {
+                imageToBuild = imageToBuild.replaceAll("\\s", "-")
+                def app = docker.build(imageToBuild)
+                app.push()
+            }
+        }
+
+        stage('Deploy to Test-int001') {
+            sshagent (credentials: ['bf7e3e68-1d06-4a69-8701-f9aae0250601']) {
+                runTrafficLiveDockerImage("10.4.164.24", dockerCredentialsId, imageToBuild)
+                withCredentials([usernamePassword(credentialsId: "${dockerCredentialsId}", usernameVariable: 'DOCKER_USR', passwordVariable: 'DOCKER_PWD')]) {
+                    sh "ssh -o StrictHostKeyChecking=no jenkins@${ServerIP} sudo docker login -u $DOCKER_USR -p $DOCKER_PWD"
+                    sh "ssh -o StrictHostKeyChecking=no jenkins@${ServerIP} sudo docker pull ${imageToBuild}"
+                    sh "ssh -o StrictHostKeyChecking=no jenkins@${ServerIP} sudo docker pull ${imageToBuild}"
+                    // If the container is already stopped/not existing we return true anyway to not let the job fails
+                    sh "ssh -o StrictHostKeyChecking=no jenkins@${ServerIP} sudo docker stop maconomyBudgetIntegration || true"
+                    sh "ssh -o StrictHostKeyChecking=no jenkins@${ServerIP} sudo docker create --rm --env-file /docker/maconomyBudgetIntegration/maconomyBudgetIntegration.conf \\ " +
+                                    "-v /logs:/logs \\ " +
+                                    "-p 8888:8888/tcp -p 8889:8889/tcp \\ " +
+                                    "--name=maconomyBudgetIntegration ${imageToBuild}"
+                    sh "ssh -o StrictHostKeyChecking=no jenkins@${ServerIP} sudo docker start maconomyBudgetIntegration"
+
+                }
+            }
+        }
+
+    }catch (caughtError) {
+        err = caughtError
+        currentBuild.result = "FAILURE"
+    } finally {
+        sendEmailNotification(currentBuild, emailTo)
+        slackNotification(currentBuild.result, currentBuild.duration)
+
+        // Remove the image from docker
+        sh "docker rmi -f ${imageToBuild}"
+        sh "docker rmi -f registry.hub.docker.com/${imageToBuild}"
+
+        /* Must re-throw exception to propagate error */
+        if (err) {
+            throw err
+        }
+    }
+}
