@@ -16,7 +16,7 @@ node {
 
         stage('Clone repository') {
             echo "Checking out ${BRANCH}"
-            git credentialsId: '612eac41-8423-4fd0-be3b-ba9465d0e1a4', url: 'git@github.com:simondstewart/MaconomyTrafficLiveBudgetIntegration.git', branch: BRANCH_NAME
+            git credentialsId: '612eac41-8423-4fd0-be3b-ba9465d0e1a4', url: 'git@github.com:simondstewart/MaconomyTrafficLiveBudgetIntegration.git', branch: BRANCH
         }
 
         stage('Maven') {
