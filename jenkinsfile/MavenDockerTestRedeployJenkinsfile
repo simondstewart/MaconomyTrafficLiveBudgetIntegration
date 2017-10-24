@@ -5,7 +5,6 @@ node {
     currentBuild.result = "SUCCESS"
     def dockerCredentialsId = "c26597e1-1def-4d7a-a2eb-f34c35514021"
     def imageToBuild = "andreadeltek/maconomytrafficlivebudgetintegration:${BUILD_TAG}-${BRANCH}"
-    def emailTo = "${env.EMAIL_TO}"
     det ServerIP = "10.4.164.24"
 
     try{
@@ -39,7 +38,6 @@ node {
                 withCredentials([usernamePassword(credentialsId: "${dockerCredentialsId}", usernameVariable: 'DOCKER_USR', passwordVariable: 'DOCKER_PWD')]) {
                     sh "ssh -o StrictHostKeyChecking=no jenkins@${ServerIP} sudo docker login -u $DOCKER_USR -p $DOCKER_PWD"
                     sh "ssh -o StrictHostKeyChecking=no jenkins@${ServerIP} sudo docker pull ${imageToBuild}"
-                    sh "ssh -o StrictHostKeyChecking=no jenkins@${ServerIP} sudo docker pull ${imageToBuild}"
                     // If the container is already stopped/not existing we return true anyway to not let the job fails
                     sh "ssh -o StrictHostKeyChecking=no jenkins@${ServerIP} sudo docker stop maconomyBudgetIntegration || true"
                     sh "ssh -o StrictHostKeyChecking=no jenkins@${ServerIP} sudo docker create --rm --env-file /docker/maconomyBudgetIntegration/maconomyBudgetIntegration.conf \\ " +
@@ -56,7 +54,6 @@ node {
         err = caughtError
         currentBuild.result = "FAILURE"
     } finally {
-        sendEmailNotification(currentBuild, emailTo)
         slackNotification(currentBuild.result, currentBuild.duration)
 
         // Remove the image from docker
