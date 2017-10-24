@@ -5,7 +5,7 @@ node {
     currentBuild.result = "SUCCESS"
     def dockerCredentialsId = "c26597e1-1def-4d7a-a2eb-f34c35514021"
     def imageToBuild = "andreadeltek/maconomytrafficlivebudgetintegration:${BUILD_TAG}-${BRANCH}"
-    det ServerIP = "10.4.164.24"
+    def ServerIP = "10.4.164.24"
 
     try{
 
