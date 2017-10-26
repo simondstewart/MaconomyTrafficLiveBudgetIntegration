@@ -228,7 +228,7 @@ public class JobBudgetMergeActionRequestBuilder {
 		@Override
 		public String toString() {
 			return "BudgetLineActionRequest [action=" + action + ", jobBudgetLine=" + jobBudgetLine + ", tlLine="
-					+ (tlLine.isPresent() ? tlLineToString(tlLine.get()) : "EMPTY" )  + "]";
+					+ (tlLine.isPresent() ? tlLineToString(tlLine.get()) : jobBudgetLine.getData().getText() )  + "]";
 		}
 
 		public String errorString() {
@@ -255,12 +255,20 @@ public class JobBudgetMergeActionRequestBuilder {
 		}
 
 		@Override
-		public int compareTo(BudgetLineActionRequest o) {
+		public int compareTo(BudgetLineActionRequest other) {
 			//DELETES at the start.
-			if(Action.DELETE.equals(action)) 
+			if(Action.DELETE.equals(action)) {
+				//If both are deletes, fall back to the reverse hierarchy order - ensuring leaves get deleted first.
+				if(Action.DELETE.equals(other.action))
+					//Note that we want the reverse order, so have inverted the other.
+					return Integer.compare(other.jobBudgetLine.getData().getLinenumber(), 
+										this.jobBudgetLine.getData().getLinenumber());
+				else {
 					return -1;
+				}
+			}
 			
-			return Integer.compare(lineOrder(), o.lineOrder());
+			return Integer.compare(this.lineOrder(), other.lineOrder());
 		}
 		
 		public Integer lineOrder() {

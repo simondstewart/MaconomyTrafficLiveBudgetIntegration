@@ -343,6 +343,21 @@ public class JobToBudgetServiceTest extends MaconomyAwareTest {
 		value.getData().setLinenumber(1);
 		value.getData().setText("Test Line");
 		
+		Record<JobBudgetLine> delete1 = new Record<>();
+		delete1.setData(new JobBudgetLine());
+		delete1.getData().setLinenumber(2);
+		delete1.getData().setText("Delete One");
+
+		Record<JobBudgetLine> delete2 = new Record<>();
+		delete2.setData(new JobBudgetLine());
+		delete2.getData().setLinenumber(3);
+		delete2.getData().setText("Delete Two");
+
+		Record<JobBudgetLine> delete3 = new Record<>();
+		delete3.setData(new JobBudgetLine());
+		delete3.getData().setLinenumber(4);
+		delete3.getData().setText("Delete Three");
+		
 		actionRequests.add(BudgetLineActionRequest.create(createJobThirdParty("ThirdParty", BigDecimal.ONE, null, null, null, 1), value));
 		actionRequests.add(BudgetLineActionRequest.create(createJobExpense("Expense", BigDecimal.ONE, null, null, null, 1), value));
 		actionRequests.add(BudgetLineActionRequest.update(createJobTask("Task4", BigDecimal.ONE, null, null, null, 4), value));
@@ -352,7 +367,10 @@ public class JobToBudgetServiceTest extends MaconomyAwareTest {
 		actionRequests.add(BudgetLineActionRequest.create(createJobStage("Stage3", Optional.empty(), 3), value ));
 		actionRequests.add(BudgetLineActionRequest.create(createJobStage("Stage1", Optional.empty(), 1), value ));
 		actionRequests.add(BudgetLineActionRequest.create(createJobStage("Stage2", Optional.empty(), 2), value ));
-		actionRequests.add(BudgetLineActionRequest.delete(value));
+		actionRequests.add(BudgetLineActionRequest.delete(delete1));
+		actionRequests.add(BudgetLineActionRequest.delete(delete2));
+		actionRequests.add(BudgetLineActionRequest.delete(delete3));
+		
 		
 		System.out.println("Pre-Ordering");
 		actionRequests.forEach(i -> System.out.println(i));
