@@ -34,7 +34,7 @@ node {
 
         stage('Deploy to Test-int001') {
             sshagent (credentials: ['bf7e3e68-1d06-4a69-8701-f9aae0250601']) {
-                runTrafficLiveDockerImage("10.4.164.24", dockerCredentialsId, imageToBuild)
+                pruneUnusedDockerImages(ServerIP)
                 withCredentials([usernamePassword(credentialsId: "${dockerCredentialsId}", usernameVariable: 'DOCKER_USR', passwordVariable: 'DOCKER_PWD')]) {
                     sh "ssh -o StrictHostKeyChecking=no jenkins@${ServerIP} sudo docker login -u $DOCKER_USR -p $DOCKER_PWD"
                     sh "ssh -o StrictHostKeyChecking=no jenkins@${ServerIP} sudo docker pull ${imageToBuild}"
