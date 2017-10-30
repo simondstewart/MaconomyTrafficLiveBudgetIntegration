@@ -1,0 +1,52 @@
+#!/usr/bin/env groovy
+
+node {
+    def err = null
+    currentBuild.result = "SUCCESS"
+    def dockerCredentialsId = "c26597e1-1def-4d7a-a2eb-f34c35514021"
+    def gitCredentialsId= "612eac41-8423-4fd0-be3b-ba9465d0e1a4"
+    def imageName = "${IMAGE_NAME}"
+    if( imageName == "") {
+        imageName = "${BUILD_TAG}"
+    }
+
+    try{
+
+        stage('Initialise') {
+                step([$class: 'WsCleanup'])
+            }
+
+        stage('Clone repository') {
+            echo "Checking out ${BRANCH}"
+            git credentialsId: gitCredentialsId, url: 'git@github.com:simondstewart/MaconomyTrafficLiveBudgetIntegration.git', branch: BRANCH
+        }
+
+        stage('Maven') {
+            withMaven(maven: 'M3',) {
+                sh "mvn -DskipTests clean install"
+            }
+        }
+
+        stage('Build & Push image') {
+            docker.withRegistry('https://registry.hub.docker.com', dockerCredentialsId) {
+                imageName = imageName.replaceAll("\\s", "-")
+                app = docker.build("andreadeltek/maconomytrafficlivebudgetintegration:${imageName}")
+                app.push()
+            }
+        }
+
+    }catch (caughtError) {
+        err = caughtError
+        currentBuild.result = "FAILURE"
+    } finally {
+        def imageToBuild = "andreadeltek/maconomytrafficlivebudgetintegration:${imageName}"
+        // Remove the image from docker
+        sh "docker rmi -f ${imageToBuild}"
+        sh "docker rmi -f registry.hub.docker.com/${imageToBuild}"
+
+        /* Must re-throw exception to propagate error */
+        if (err) {
+            throw err
+        }
+    }
+}
