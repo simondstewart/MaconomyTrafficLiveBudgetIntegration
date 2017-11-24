@@ -4,7 +4,7 @@
 
 	<groupId>com.deltek.integration</groupId>
 	<artifactId>MaconomyTrafficLiveBudgetIntegration</artifactId>
-	<version>1.0.1</version>
+	<version>1.0.2-SNAPSHOT</version>
 	<packaging>jar</packaging>
 
 	<name>MaconomyTrafficLiveBudgetIntegration</name>
@@ -146,7 +146,7 @@
 
 	<scm>
 		<developerConnection>scm:git:https://github.com/simondstewart/MaconomyTrafficLiveBudgetIntegration</developerConnection>
-	  <tag>1.0.1</tag>
+	  <tag>1.0.0</tag>
   </scm>
 
 	<build>
