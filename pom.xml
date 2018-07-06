@@ -146,7 +146,7 @@
 
 	<scm>
 		<developerConnection>scm:git:https://github.com/simondstewart/MaconomyTrafficLiveBudgetIntegration</developerConnection>
-	  <tag>1.0.0</tag>
+	  <tag>1_BRANCH</tag>
   </scm>
 
 	<build>
