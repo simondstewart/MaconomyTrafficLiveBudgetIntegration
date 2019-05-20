@@ -57,9 +57,7 @@ public class JobToBudgetService {
 
         budgetData = updateBudgetType(budgetData, integrationDetails.getMaconomyBudgetType(), mrc);
 
-        if(budgetData.card().hasAction("action:reopenbudget")) {
-        	budgetData = mrc.jobBudget().postToAction("action:reopenbudget", budgetData.card());
-        }
+        budgetData = openBudget(budgetData, mrc);
         
         budgetData = buildAndExecuteMergeActions(budgetData, trafficJob, integrationDetails, mrc);
         budgetData.card().getData()
@@ -148,7 +146,7 @@ public class JobToBudgetService {
         return gsonParser.toJson(lastUpdateObject);
     }
 
-    private CardTableContainer<JobBudget, JobBudgetLine> updateBudgetType(CardTableContainer<JobBudget, JobBudgetLine> budgetData, 
+    public CardTableContainer<JobBudget, JobBudgetLine> updateBudgetType(CardTableContainer<JobBudget, JobBudgetLine> budgetData, 
     														String budgetType, MaconomyPSORestContext mrc) {
         Record<JobBudget> budget = budgetData.card();
 
@@ -160,4 +158,11 @@ public class JobToBudgetService {
         return budgetData;
     }
 
+    public CardTableContainer<JobBudget, JobBudgetLine> openBudget(CardTableContainer<JobBudget, JobBudgetLine> budgetData, MaconomyPSORestContext mrc) {
+        if(budgetData.card().hasAction("action:reopenbudget")) {
+        	budgetData = mrc.jobBudget().postToAction("action:reopenbudget", budgetData.card());
+        }
+        return budgetData;
+    }
+    
 }
