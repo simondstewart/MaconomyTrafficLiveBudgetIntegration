@@ -36,16 +36,16 @@ public class AsyncTaskRequestHandlerTest {
 	@Resource
 	private AsyncTaskRequestHandler asyncTaskRequestHandler;
 	
-//	@Test
+	@Test
 	public void retrieveTrafficLiveJobAndMerge() {
 		asyncTaskRequestHandler.handleBackgroundTaskRequest(buildTestMessage());
 	}
 
 	private AsyncTaskMessage<ErpIntegrationSettingsTO, JobTO> buildTestMessage() {
 
-		String userName = "redgum2k4+token@gmail.com";
+		String userName = "redgum2k4+token2@gmail.com";
 		TrafficLiveRestClient tlc = new TrafficLiveRestClient(userName, 
-				"p210pC2dOK6Y7e0SstciVXrOJycqd30GJRM0FIpj", 
+				"YXvtrlYQ9knBySZCwpXdLGTKaq0g4DurygpLvDR7", 
 				"https://stage-api.sohnar.com/TrafficLiteServer/openapi");
 
 		//Find this employee.
@@ -57,7 +57,7 @@ public class AsyncTaskRequestHandlerTest {
 				tlc.get("/staff/companysettings", TrafficCompanySettingsTO.class);
 		
 		//Load the test Job, then build the message from it.
-		JobTO job = tlc.job().getById(2367396l);
+		JobTO job = tlc.job().getById(2367729l);
 		
 		TrafficEmployeeEventTO<JobTO> event = new TrafficEmployeeEventTO<JobTO>(TrafficEmployeeEventType.BACKGROUND_TASK_REQUSTED, 
 																				new Identifier(emp.get().getId()), 

@@ -515,7 +515,7 @@ public class JobToBudgetServiceTest extends MaconomyAwareTest {
         
 	}
 	
-	private CardTableContainer<JobBudget, JobBudgetLine> clearBudget(String string) {
+	public CardTableContainer<JobBudget, JobBudgetLine> clearBudget(String string) {
         CardTableContainer<JobBudget, JobBudgetLine> budgetData = 
         		restClientContext.jobBudget().data(String.format("jobnumber=%s", string));
         

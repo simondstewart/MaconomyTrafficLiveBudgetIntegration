@@ -40,12 +40,24 @@ public class MaconomyAwareTest {
     public static Collection<?> data() {
     	return Arrays.asList(
     		//Collection items need to be arrays signifying constructor arguments.
-    		Arrays.asList(build222ServerConfig()).toArray(), 
-    		Arrays.asList(build233ServerConfig()).toArray()
+//    		Arrays.asList(build222ServerConfig()).toArray(), 
+//    		Arrays.asList(build233ServerConfig()).toArray(),
+    		Arrays.asList(build243ServerConfig()).toArray()
     		);
     }
 
-    private static Map<String, String> build222ServerConfig() {
+    private static Object build243ServerConfig() {
+		Map<String, String> cfg = new HashMap<>();
+		cfg.put("macRestURL", "http://193.17.206.161:4111/containers/v1/en20p103");
+		cfg.put("user", "Administrator");
+		cfg.put("pass", "123456");
+		cfg.put("budgetType", "baseline");
+		cfg.put("chargeBandExternalCode", "105");
+		cfg.put("testJobNumber", "1020100");
+		return cfg;
+	}
+
+	private static Map<String, String> build222ServerConfig() {
 		Map<String, String> cfg = new HashMap<>();
 		cfg.put("macRestURL", "http://193.17.206.162:4111/containers/v1/x1demo");
 		cfg.put("user", "Administrator");
