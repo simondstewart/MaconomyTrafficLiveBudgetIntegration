@@ -30,7 +30,7 @@ node {
         stage('Build & Push image') {
             docker.withRegistry('https://registry.hub.docker.com', dockerCredentialsId) {
                 imageName = imageName.replaceAll("\\s", "-")
-                app = docker.build("andreadeltek/maconomytrafficlivebudgetintegration:${imageName}")
+                app = docker.build("andreadeltek/maconomytrafficlivebudgetintegration:${imageName}", "--pull")
                 app.push()
             }
         }
